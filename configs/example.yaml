@@ -1,0 +1,36 @@
+# groove pipeline config - copy this file and edit it for your run.
+# Paths are relative to this file unless absolute.
+
+name: my_run                        # dataset name
+output_folder: ../results/my_run
+
+# ---- which targets (download stage) -----------------------------------------
+targets: ../data/targets/example_targets.csv   # CSV with an ID column plus RA and Dec (degrees)
+group: ""                           # one value of the grouping column, e.g. a field or cluster name
+group_column: ""                    # name of that column; "" = auto-detect (Name/field/group/cluster...)
+filters: {}                         # any other cuts, e.g. {Tier: 3, Quality: good}
+gaia_id: ""                         # a single Gaia DR3 ID, e.g. "1234567890123456789"
+years: full                         # 2, 4, 10 or full (full ATLAS history)
+photometry: reduced                 # reduced (recommended) or difference
+
+# input_folder: my_existing_lightcurves  # optional raw CSV folder; use --skip-download
+
+# ---- advanced: override any setting of a stage ------------------------------
+# Keys are the UPPER_CASE names in src/groove/<stage>/settings.py
+download:
+  dry_run: false                    # true = list targets and time estimate, submit nothing
+  limit_targets: null               # e.g. 5 for a test run
+clean:
+  rescue_enable: false              # restore dip points that only failed the soft cuts
+select:                             # source-level usability cuts
+  min_points: 100
+  min_points_per_band: 30
+  min_baseline_days: 365
+  max_removed_fraction: 0.5
+  max_median_uncertainty_mag: 0.2
+periods:
+  min_period_days: 0.5
+  max_period_days: 200.0
+morphology:                         # keys from src/groove/morphology/defaults.yaml
+  mode: fit                         # fit for the first run, transform to add targets to an existing map
+  model_version: null               # e.g. reference_v1

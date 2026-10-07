@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use groove, please cite it as below."
+title: "groove: periodic-variability and deep-occultation search in ATLAS light curves"
+type: software
+authors:
+  - family-names: Duffy
+    given-names: Aidan
+version: 1.0.1
+date-released: 2026-10-07
+license: MIT
+references:
+  - type: thesis
+    title: "The Search for Exotic Transits"
+    authors:
+      - family-names: Duffy
+        given-names: Aidan
+    institution:
+      name: "Universidad Autónoma de Madrid"
+    year: 2026
+    thesis-type: "Master's thesis"

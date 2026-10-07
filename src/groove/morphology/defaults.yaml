@@ -1,0 +1,194 @@
+# Default settings for the morphology stage. Override any key under
+# `morphology:` in your pipeline YAML; groove.pipeline fills in the paths.
+#
+disable_hard_coded_settings: true
+
+# The first run of a map should be `fit`. For later batches use
+# mode: transform, which never refits the frozen preprocessing or UMAP models.
+mode: fit
+output_root: null   # filled in by groove.pipeline
+model_version: null
+random_seed: 42
+
+# Lower numeric dataset priority wins period-table conflicts; list order supplies
+# the default priority when the field is omitted. A source-level recommendation
+# table is authoritative; ls_period_search_summary supplies per-band diagnostics
+# only and does not supersede it.
+period_conflict_relative_tolerance: 0.001
+
+# YAML-only input selection. This section is used only when hard-coded settings
+# are disabled. Any CLI --input replaces the complete YAML/hard-coded dataset
+# selection; it does not append.
+datasets: []        # filled in by groove.pipeline
+
+# Observed ATLAS schema reference. These lists document the built-in aliases;
+# metadata/summary CSVs are ignored and IDs are never converted through float.
+source_id_column_aliases:
+  - target_GaiaDR3
+  - gaia_dr3
+  - GaiaDR3
+  - source_id
+  - gaia_source_id
+  - 'Gaia DR3 source_id'
+  - object_id
+  - atoid
+  - ATOID
+time_column_aliases: [MJD, '###MJD', mjd, mjd_obs, time, jd]
+filter_column_aliases: [F, filter, Filter, filt, band, passband]
+magnitude_column_aliases: [m, mag, magnitude, m_mag]
+magnitude_error_column_aliases: [dm, mag_err, m_err, emag, magnitude_error, e_mag]
+flux_column_aliases: [uJy, ujy, flux, Flux]
+flux_error_column_aliases: [duJy, dujy, flux_err, Flux_err, flux_error, flux_uncertainty]
+accepted_filter_values:
+  c: [c, C]
+  o: [o, O]
+
+# Period-search results are authoritative. The first alias is the source-level
+# recommendation used for the principal fold. A fallback period search is
+# deliberately disabled and is never run unless explicitly enabled.
+recommended_period_column_aliases:
+  - recommended_period_days
+  - photometric_period_days
+  - consensus_period_days
+fallback_period_column_aliases:
+  - recommended_series_period_days
+  - selected_period_days
+  - final_period_days
+  - raw_ls_best_period_days
+  - ls_best_period_days
+  - period_days
+use_recommended_period: true
+calculate_half_period_fold: true
+calculate_double_period_fold: true
+allow_period_fallback: false
+fallback_min_period_days: 0.5
+fallback_max_period_days: 200.0
+fallback_samples_per_peak: 10
+
+# One fixed-length source vector represents both filters. Absolute amplitude is
+# retained at deliberately low weight so it cannot dominate shape.
+number_of_phase_bins: 64
+# Mapping only: the 64-bin measurement/classification profile above is retained.
+umap_phase_bins: 32
+number_of_time_sections: 4
+use_c_band: true
+use_o_band: true
+minimum_observations: 50
+minimum_phase_coverage: 0.30
+
+# Frozen representation. Any change to these settings or the feature order
+# changes the configuration hash and requires refit, not transform.
+feature_weights:
+  aligned_phase_profile: 1.00
+  fourier_shape: 0.50
+  morphology_descriptors: 0.50
+  periodic_significance: 0.15
+  amplitude: 0.10
+  data_quality: 0.05
+  observing_metadata: 0.05
+# Values above are relative squared-distance contributions. The representation
+# therefore applies sqrt(weight) after RobustScaler; classification is untouched.
+feature_weight_interpretation: distance_contribution
+use_pca: false
+pca_variance_retained: 0.95
+pca_max_components: 50
+# null selects min(15, max(5, round(sqrt(n_sources)))); this is about 13 for 180.
+combined_umap_n_neighbors: null
+combined_umap_min_dist: 0.08
+combined_umap_metric: cosine
+periodic_umap_n_neighbors: null
+periodic_umap_min_dist: 0.08
+periodic_umap_metric: cosine
+transient_umap_n_neighbors: null
+transient_umap_min_dist: 0.08
+transient_umap_metric: cosine
+evidence_umap_n_neighbors: null
+evidence_umap_min_dist: 0.08
+evidence_umap_metric: euclidean
+run_umap_parameter_comparison: false
+nearest_reference_neighbours: 5
+ood_quantile: 0.99
+evolution_quantile: 0.95
+
+# Automatic suggestions are documented rules over measured features. UMAP is a
+# visual representation, not the classifier. These conservative defaults favour
+# review/noisy over calling weak structure exotic.
+automatic_suggestions: true
+thresholds:
+  periodic_snr: 5.0
+  strong_periodic_snr: 8.0
+  event_sigma: 5.0
+  coherent_profile_correlation: 0.55
+  filter_disagreement_correlation: 0.10
+  transit_dip_snr: 6.0
+  transit_max_duty_cycle: 0.25
+  transit_min_repeat_sections: 2
+  sine_max_residual_ratio: 0.35
+  flare_min_event_snr: 5.0
+  flare_min_events: 4
+  flare_min_points_per_event: 2
+  flare_event_window_days: 1.0
+  flare_min_asymmetry: 0.85
+  flare_max_point_fraction: 0.10
+  flare_min_duty_fraction: 0.002
+  alias_relative_tolerance: 0.01
+  exotic_candidate_min_score: 0.70
+  nonvar_scatter_over_error: 1.5
+  noisy_min_scatter_ratio: 3.0
+  low_confidence: 0.60
+
+# Manual labels always win and are never overwritten. The pipeline creates or
+# synchronises the output-root copy from the repository template as needed.
+manual_labels_file: null   # defaults to <output_root>/manual_labels.csv
+
+# Incremental behaviour. null selects the mode-aware default: no outline for
+# fit/refit and a black outline for the latest transform batch. Either CLI
+# outline switch overrides it; plot-only never touches features or coordinates.
+existing_id_policy: skip       # skip | replace | error
+outline_new_sources: null
+batch_id: null
+force_recompute_features: false
+
+# Outputs, caching and recoverability. The existing LS-periodogram PNG is the
+# canonical per-source image. This pipeline creates only one fallback fold when
+# that image is unavailable, then hard-links it into the primary family folder.
+# Secondary/review memberships are CSV manifests rather than extra image trees.
+make_maps: true
+make_review_plots: false
+make_category_folds: true
+make_category_appendix: true
+prefer_existing_period_plots: true
+generate_missing_source_plots: true
+allow_plot_copy_fallback: false
+appendix_per_page: 9
+appendix_max_pages: 0
+review_plot_dpi: 110
+
+# Feature extraction and final output generation are independently resumable.
+# After a successful run, compact per-source summaries are retained while the
+# large full-light-curve feature caches are deleted.
+resume_finalisation: true
+clean_full_feature_cache_after_success: true
+cache_full_records_with_existing_period_plot: false
+write_validation_sample: true
+validation_sample_size: 200
+
+# Fixed colour-blind-friendly mapping. It is copied into model metadata and must
+# remain frozen across transform/relabel/plot-only runs of the model version.
+category_colours:
+  transit: '#0072B2'
+  wavelike: '#56B4E9'
+  flaring: '#E69F00'
+  irregular_variable: '#CC79A7'
+  nonvar: '#009E73'
+  noisy: '#999999'
+  unknown: '#6F4E7C'
+
+primary_categories:
+  - transit
+  - wavelike
+  - flaring
+  - irregular_variable
+  - nonvar
+  - noisy
+  - unknown

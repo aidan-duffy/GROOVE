@@ -1,0 +1,9 @@
+# Replace these target-list and ID placeholders with your own source.
+name: single_target
+output_folder: ../results/single_target
+targets: my_targets.csv
+gaia_id: "YOUR_GAIA_DR3_ID"
+years: full
+morphology:
+  mode: classify  # single-source features, labels and phase plots; no reference needed
+  n_jobs: 1
