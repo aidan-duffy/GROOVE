@@ -61,7 +61,7 @@ def create_master_review_plot(recommendations: pd.DataFrame) -> str:
             label_text = str(row.get("source_id", ""))[-6:]
             ax.text(period, i, f"  {label_text}", va="center", fontsize=6, alpha=0.7)
 
-    fig.savefig(output, dpi=S.PLOT_DPI, bbox_inches="tight")
+    _files.save_figure(fig, output, dpi=S.PLOT_DPI, bbox_inches="tight")
     plt.close(fig)
     return str(output)
 
@@ -78,7 +78,7 @@ def plot_best_per_star(
     bls: dict[str, Any] | None = None,
     recommendation_label: str = "",
 ) -> str:
-    if S.PLOT_MODE.strip().lower() == "none":
+    if S.PLOT_MODE.strip().lower() == "none" or prepared["series_name"] not in S.PLOT_SERIES:
         return ""
     nrows = 3 if bls is not None else 2
     fig, axes = plt.subplots(
@@ -247,13 +247,14 @@ def plot_best_per_star(
         plot_dir = series_plot_root / folder
         plot_dir.mkdir(parents=True, exist_ok=True)
         output = plot_dir / output_name
-        fig.savefig(output, dpi=S.PLOT_DPI, bbox_inches="tight")
+        _files.save_figure(fig, output, dpi=S.PLOT_DPI, bbox_inches="tight")
         if not output.is_file() or output.stat().st_size <= 0:
             raise OSError(f"Plot was not written correctly: {output}")
         outputs.append(output)
     plt.close(fig)
     row["plot_folders"] = ";".join(folder.as_posix() for folder in folders)
     row["plot_paths_all"] = ";".join(str(output) for output in outputs)
+    row["plot_error"] = ""
     return str(outputs[0]) if outputs else ""
 
 
@@ -498,7 +499,7 @@ def plot_alias_candidate_folds(
         max_length=180,
     )
     output = output_dir / f"{unique_stem}_alias_top{requested_n}_folds.png"
-    fig.savefig(output, dpi=S.PLOT_DPI, bbox_inches="tight")
+    _files.save_figure(fig, output, dpi=S.PLOT_DPI, bbox_inches="tight")
     plt.close(fig)
     if not output.is_file() or output.stat().st_size <= 0:
         raise OSError(f"Alias diagnostic was not written correctly: {output}")
@@ -588,7 +589,7 @@ def plot_harmonic_candidate_folds(
         max_length=180,
     )
     output = output_dir / f"{unique_stem}_harmonic_folds.png"
-    fig.savefig(output, dpi=S.PLOT_DPI, bbox_inches="tight")
+    _files.save_figure(fig, output, dpi=S.PLOT_DPI, bbox_inches="tight")
     plt.close(fig)
     if not output.is_file() or output.stat().st_size <= 0:
         raise OSError(f"Harmonic diagnostic was not written correctly: {output}")
@@ -632,7 +633,7 @@ def plot_from_saved_results(
     }
     rows_by_file: dict[str, list[dict[str, Any]]] = {}
     for row in summary_rows:
-        if str(row.get("status")) != "ok":
+        if str(row.get("status")) != "ok" or str(row.get("series")) not in S.PLOT_SERIES:
             continue
         rows_by_file.setdefault(str(row.get("file")), []).append(row)
     source_info_lookup: dict[str, dict[str, Any]] = {}
@@ -679,6 +680,8 @@ def plot_from_saved_results(
                 catalogue_period = float(ext_period)
 
             for series in S.SERIES_TO_RUN:
+                if series not in S.PLOT_SERIES:
+                    continue
                 key = (str(metadata.get("file")), str(metadata.get("source_id")), str(series))
                 row = row_lookup.get(key)
                 if row is None:
@@ -733,7 +736,7 @@ def choose_extra_fold_series_rows(
     by_series: dict[str, dict[str, Any]] = {}
     for row in source_rows:
         series = str(row.get("series", ""))
-        if series in S.SERIES_TO_RUN and series not in by_series:
+        if series in S.SERIES_TO_RUN and series in S.PLOT_SERIES and series not in by_series:
             by_series[series] = row
     if not by_series:
         return []
@@ -874,6 +877,8 @@ def generate_extra_phase_fold_diagnostics(
                 selected_rows = list(selected_by_series.values())
             for series_row in selected_rows:
                 series = str(series_row.get("series", ""))
+                if series not in S.PLOT_SERIES or series not in S.SERIES_TO_RUN:
+                    continue
                 prepared = _loading.prepare_series(df, series)
                 if prepared is None:
                     manifest_rows.append(

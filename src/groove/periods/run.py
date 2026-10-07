@@ -384,6 +384,9 @@ def main() -> None:
     _files.save_all_tables(summary_rows, peak_rows_all, current_inventory, memory_inventory, recommendations)
     if not any(row.get("status") == "ok" for row in summary_rows):
         raise RuntimeError("No usable period-search results. See ls_period_search_summary.csv for failures and skipped sources.")
+    plot_failures = [row for row in summary_rows if row.get("plot_error")]
+    if plot_failures:
+        raise RuntimeError(f"{len(plot_failures)} period plot(s) failed. Review plot_error in ls_period_search_summary.csv and rerun.")
     if not any(row.get("status") == "failed" for row in summary_rows):
         _files.mark_run_complete(run_signature)
 

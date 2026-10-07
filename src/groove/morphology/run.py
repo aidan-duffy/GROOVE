@@ -63,7 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="ATLAS morphology UMAP pipeline")
     parser.add_argument("--config", type=Path, default=S.DEFAULT_CONFIG_PATH)
     parser.add_argument("--mode", choices=[
-        "classify", "fit", "transform", "refit", "relabel", "plot-only",
+        "classify", "fit", "transform", "refit", "relabel", "plot-only", "map-only",
         "highlight-source", "umap-families"])
     parser.add_argument("--output-root", dest="output_root")
     parser.add_argument("--model-version", dest="model_version")
@@ -119,6 +119,8 @@ def check_environment(logger: Optional[logging.Logger] = None) -> None:
 def execute(args: argparse.Namespace) -> Dict[str, Any]:
     check_environment()
     config = apply_cli(load_configuration(args.config), args)
+    _plots.validate_dataset_markers(config.get("dataset_markers", {}))
+    S.selected_maps(config)
     np.random.seed(int(config.get("random_seed", 42)))
     mode = str(config.get("mode", "fit"))
     if mode == "classify":
@@ -129,6 +131,8 @@ def execute(args: argparse.Namespace) -> Dict[str, Any]:
         return _modes.transform_mode(config, args)
     if mode == "relabel":
         return _modes.relabel_or_plot(config, args, mode)
+    if mode == "map-only":
+        return _plots.map_only(config, args)
     if mode == "plot-only":
         return _plots.phase_fold_plot_only(config, args)
     if mode == "highlight-source":

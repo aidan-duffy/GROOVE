@@ -19,9 +19,27 @@ from . import utils as _utils
 
 
 def ensure_structure(version_dir: Path) -> None:
-    for name in ("maps", "source_plots", "category_folds", "appendix",
-                 "interest", "tables", "cache", "models"):
+    for name in ("tables", "cache", "models"):
         (Path(version_dir) / name).mkdir(parents=True, exist_ok=True)
+    for name in ("maps", "source_plots", "category_folds", "appendix", "interest"):
+        (figure_directory(version_dir) / name).mkdir(parents=True, exist_ok=True)
+
+
+def figure_directory(version_dir: Path) -> Path:
+    """Keep every visual product in results/plots/ML/<run>, beside other plots."""
+    path = Path(version_dir)
+    if path.parent.name in {"saved_runs", "model_versions"}:
+        root = path.parent.parent
+        name = path.name.removeprefix("model_") if path.parent.name == "model_versions" else path.name
+    elif path.name == "model_versions":
+        root, name = path.parent, "default"
+    elif path.name == "classification":
+        root, name = path.parent, "classification"
+    else:
+        # Standalone plotting helpers may intentionally use an arbitrary folder.
+        return path
+    plot_base = root.parent if root.name == "4_morphology" else root
+    return plot_base / "plots" / "ML" / name
 
 
 def save_models(version_dir: Path, block: str, models: Mapping[str, Any]) -> None:
@@ -173,13 +191,8 @@ def clean_full_feature_cache(version_dir: Path, logger: logging.Logger) -> None:
 
 
 def version_directory(output_root: Path, version: Optional[str]) -> Path:
-    """No --model-version means everything lives directly under model_versions/.
-
-    That gives the flat layout <output_root>/model_versions/maps etc. Naming a
-    version adds one level so several frozen models can coexist.
-    """
-    base = Path(output_root) / "model_versions"
-    return base if not version else base / ("model_%s" % version)
+    """Saved numerical state is separate from the user-facing plot folder."""
+    return Path(output_root) / "saved_runs" / (_utils.safe_name(str(version)) if version else "default")
 
 
 def resolve_version_dir(output_root: Path, requested: Optional[str]) -> Tuple[str, Path]:
@@ -188,7 +201,13 @@ def resolve_version_dir(output_root: Path, requested: Optional[str]) -> Tuple[st
         pointer = Path(output_root) / "current_model.json"
         if pointer.exists():
             version = json.loads(pointer.read_text(encoding="utf-8")).get("model_version", "") or ""
-    return version, version_directory(output_root, version)
+    directory = version_directory(output_root, version)
+    legacy = Path(output_root) / "model_versions"
+    if version:
+        legacy = legacy / ("model_%s" % version)
+    if not directory.exists() and legacy.exists():
+        directory = legacy
+    return version, directory
 
 
 def update_current_pointer(output_root: Path, version: str, version_dir: Path) -> None:

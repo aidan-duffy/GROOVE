@@ -1,0 +1,49 @@
+# Data and outputs — never commit these
+results/
+outputs/
+Outputs/
+Data/
+*.fits
+*.fits.gz
+*.parquet
+*.pkl
+*.joblib
+*.npy
+*.npz
+*.zip
+
+# But keep the bundled small files
+!data/targets/*.csv
+!data/example/**
+!data/manual_labels_template.csv
+
+# Secrets
+.env
+*token*
+!*template*
+
+# Python
+__pycache__/
+*.pyc
+.venv*/
+venv/
+env/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local demonstration runs and environment records
+/demo*/
+/groove_demo*/
+/environment.txt
+
+# Contained local validation runs
+/testing/

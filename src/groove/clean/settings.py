@@ -25,7 +25,7 @@ PLOT_DIR: Path | None = None    # set by the pipeline config
 # ============================================================================
 
 FILE_GLOB = "*.csv"             # Recommended: all split per-star CSV files.
-OVERWRITE_CLEANED_FILES = True  # Recommended: False; existing cleaned files stay unchanged.
+OVERWRITE_CLEANED_FILES = True  # Recompute outputs when rerunning with changed cuts.
 PROGRESS_EVERY = 100             # Print progress every N files.
 
 
@@ -104,7 +104,7 @@ Y_MAX = 10460.0                  # Keep away from detector y edge; recommended 1
 # because rescue can restore a point that failed a soft image-quality cut.
 # ============================================================================
 
-RESCUE_ENABLE = False           # Thesis default: off. Restores dip points that only failed soft cuts.
+RESCUE_ENABLE = False            # Package default; original supplied script enabled rescue.
 BASELINE_WINDOW_PTS = 41         # Running-median window; recommended odd value near 41.
 RESCUE_Z = 5.0                   # Candidate dip significance; recommended 5 sigma.
 

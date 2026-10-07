@@ -61,8 +61,13 @@ def cmd_stage(args):
 
 def cmd_demo(args):
     from .demo import create
-    path = create(args.path)
+    path = create(args.path, extended=args.extended)
     print(f"Created synthetic demonstration. Run: groove run -c {path} --skip-download")
+
+
+def cmd_demo_check(args):
+    from .demo_check import check
+    check(args.path)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -77,7 +82,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("demo", help="create a token-free synthetic example")
     s.add_argument("path", nargs="?", default="groove_demo")
+    s.add_argument("--extended", action="store_true", help="include alias, eclipse, flare, evolving and single-filter cases")
     s.set_defaults(func=cmd_demo)
+
+    s = sub.add_parser("demo-check", help="audit synthetic periods, review labels and diagnostic outputs")
+    s.add_argument("path")
+    s.set_defaults(func=cmd_demo_check)
 
     s = sub.add_parser("targets", help="summarise a target list and its grouping column")
     s.add_argument("targets")

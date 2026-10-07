@@ -27,7 +27,7 @@ def build_neighbour_review_pages(validation: pd.DataFrame, table: pd.DataFrame,
                                  logger: logging.Logger) -> None:
     if validation.empty:
         return
-    maps = Path(version_dir) / "maps"
+    maps = _persistence.figure_directory(version_dir) / "maps"
     lookup = table.set_index("source_key", drop=False)
     pages = 0
     for anchor_id, block in validation.groupby("anchor_source_id", sort=False):
@@ -158,7 +158,7 @@ def build_family_maps(records: Sequence[Mapping[str, Any]], table: pd.DataFrame,
 
     present = [c for c in S.PRIMARY_CATEGORIES
                if (work["final_primary_tag"] == c).any()]
-    maps = Path(version_dir) / "maps"
+    maps = _persistence.figure_directory(version_dir) / "maps"
     maps.mkdir(parents=True, exist_ok=True)
 
     typical_example_rows: Dict[str, int] = {}
@@ -314,15 +314,70 @@ def build_family_maps(records: Sequence[Mapping[str, Any]], table: pd.DataFrame,
                          "family": work["final_primary_tag"].astype(str)})
 
 
+DATASET_MARKERS = {
+    "circle": "o", "square": "s", "diamond": "D", "triangle-up": "^",
+    "triangle-down": "v", "cross": "P", "x": "X", "star": "*", "hexagon": "h",
+}
+
+
+def validate_dataset_markers(value):
+    markers = {} if value is None else value
+    if not isinstance(markers, Mapping) or any(
+            not isinstance(name, str) or not isinstance(symbol, str) or symbol not in DATASET_MARKERS
+            for name, symbol in markers.items()):
+        raise ValueError("dataset_markers must map dataset names to: " + ", ".join(DATASET_MARKERS))
+    return dict(markers)
+
+
+def draw_overview_maps(table, version_dir, config, colours, outline_new):
+    markers = validate_dataset_markers(config.get("dataset_markers", {}))
+    selected = S.selected_maps(config) if bool(config.get("make_maps", True)) else []
+    map_dir = _persistence.figure_directory(version_dir) / "maps"
+    for name, (prefix, title, basename) in S.MAP_DEFINITIONS.items():
+        if name in selected:
+            make_static_map(table, prefix + "_1", prefix + "_2", title,
+                            basename, version_dir, colours, outline_new,
+                            dataset_markers=markers)
+        else:
+            for suffix in (".png", ".pdf", "_interactive.html"):
+                (map_dir / (basename + suffix)).unlink(missing_ok=True)
+
+
+def map_only(config, args):
+    """Redraw saved overview coordinates without recomputing scientific state."""
+    validate_dataset_markers(config.get("dataset_markers", {}))
+    S.selected_maps(config)
+    _, state = _persistence.resolve_version_dir(
+        Path(config["output_root"]), config.get("model_version"))
+    catalogue = state / "tables/all_sources.csv"
+    if not catalogue.is_file():
+        raise SystemExit("Saved catalogue not found: " + str(catalogue))
+    table = _loading.read_table(catalogue)
+    if "dataset" in table:
+        print("Saved dataset names/counts: " + str(table["dataset"].value_counts().to_dict()))
+    colours = dict(S.CATEGORY_COLOURS)
+    colours.update(config.get("category_colours", {}) or {})
+    outline = bool(config.get("outline_new_sources", False))
+    if args.outline_new:
+        outline = True
+    if args.no_outline_new:
+        outline = False
+    draw_overview_maps(table, state, config, colours, outline)
+    print("Redrawn saved overview maps: " + str(_persistence.figure_directory(state) / "maps"))
+    return {"version_dir": str(state), "n_sources": len(table)}
+
+
 def make_static_map(table: pd.DataFrame, x_col: str, y_col: str, title: str,
                     base_name: str, version_dir: Path, colours: Mapping[str, str],
                     outline_new: bool,
-                    highlights: Optional[Mapping[str, str]] = None) -> None:
+                    highlights: Optional[Mapping[str, str]] = None,
+                    dataset_markers: Optional[Mapping[str, str]] = None) -> None:
     if x_col not in table.columns or y_col not in table.columns:
         return
     plot_table = table.loc[np.isfinite(table[x_col]) & np.isfinite(table[y_col])]
     if plot_table.empty:
         return
+    markers = validate_dataset_markers(dataset_markers)
     fig, ax = plt.subplots(figsize=(11, 9))
     counts = plot_table["final_primary_tag"].value_counts().to_dict()
     handles = []
@@ -351,11 +406,13 @@ def make_static_map(table: pd.DataFrame, x_col: str, y_col: str, title: str,
             if part.empty:
                 continue
             use_edge = edgecolour if outline_new else "none"
-            ax.scatter(part[x_col], part[y_col], s=marker_size,
-                       alpha=marker_alpha, c=colour,
-                       edgecolors=use_edge,
-                       linewidths=width if (outline_new and use_edge != "none") else 0.0,
-                       zorder=zorder)
+            groups = part.groupby("dataset", sort=True, dropna=False) if markers and "dataset" in part else [("", part)]
+            for dataset, group in groups:
+                ax.scatter(group[x_col], group[y_col], s=marker_size,
+                           marker=DATASET_MARKERS[markers.get(str(dataset), "circle")],
+                           alpha=marker_alpha, c=colour, edgecolors=use_edge,
+                           linewidths=1.8 if (outline_new and use_edge != "none") else 0.0,
+                           zorder=zorder + (20 if outline_new and use_edge != "none" else 0))
     for category in S.PRIMARY_CATEGORIES:
         if not counts.get(category, 0):
             continue
@@ -365,6 +422,16 @@ def make_static_map(table: pd.DataFrame, x_col: str, y_col: str, title: str,
                                   category.replace("_", " ").title(),
                                   int(counts.get(category, 0)),
                                   100.0 * float(counts.get(category, 0)) / total)))
+    if markers and "dataset" in plot_table:
+        for dataset, count in plot_table["dataset"].astype(str).value_counts().sort_index().items():
+            handles.append(Line2D([0], [0], linestyle="none",
+                marker=DATASET_MARKERS[markers.get(dataset, "circle")],
+                markerfacecolor="white", markeredgecolor="black", color="black",
+                label="Dataset: %s (N=%d)" % (dataset, count)))
+    if outline_new and "is_latest_batch" in plot_table and _utils.bool_series(plot_table["is_latest_batch"]).any():
+        handles.append(Line2D([0], [0], linestyle="none", marker="o",
+            markerfacecolor="white", markeredgecolor="black", markeredgewidth=1.8,
+            label="Black outline: latest batch"))
     # Optional additive annotation.  The source's already-saved coordinates are
     # used verbatim: this does not call UMAP.transform or change the embedding.
     for source_id, label in (highlights or {}).items():
@@ -392,18 +459,158 @@ def make_static_map(table: pd.DataFrame, x_col: str, y_col: str, title: str,
     if handles:
         ax.legend(handles=handles, loc="best", fontsize=9)
     fig.tight_layout()
-    maps = Path(version_dir) / "maps"
+    maps = _persistence.figure_directory(version_dir) / "maps"
     maps.mkdir(parents=True, exist_ok=True)
     fig.savefig(maps / (base_name + ".png"), dpi=170)
     fig.savefig(maps / (base_name + ".pdf"))
     plt.close(fig)
+    make_interactive_map(plot_table, x_col, y_col, title, base_name,
+                         version_dir, colours, outline_new, highlights, markers)
+
+
+def make_interactive_map(table: pd.DataFrame, x_col: str, y_col: str, title: str,
+                         base_name: str, version_dir: Path, colours: Mapping[str, str],
+                         outline_new: bool,
+                         highlights: Optional[Mapping[str, str]] = None,
+                    dataset_markers: Optional[Mapping[str, str]] = None) -> None:
+    """Self-contained Plotly map with source details and linked phase images."""
+    import os
+    import html
+    from urllib.parse import quote
+    import plotly.graph_objects as go
+    maps = _persistence.figure_directory(version_dir) / 'maps'
+    maps.mkdir(parents=True, exist_ok=True)
+    markers = validate_dataset_markers(dataset_markers)
+    chart = go.Figure()
+    total = len(table)
+    for category in S.PRIMARY_CATEGORIES:
+        block = table.loc[table.final_primary_tag.eq(category)]
+        if block.empty:
+            continue
+        groups = block.groupby("dataset", sort=True, dropna=False) if markers and "dataset" in block else [("", block)]
+        for dataset, subset in groups:
+            dataset = str(dataset)
+            details = []
+            for _, row in subset.iterrows():
+                source_id = _utils.clean_source_id(row.get('source_id', ''))
+                picture = _source_phase_plot_path(version_dir, source_id)
+                link = quote(os.path.relpath(picture, maps).replace(os.sep, '/'), safe='/') if picture else ''
+                details.append([html.escape(source_id), html.escape(str(row.get('dataset', ''))),
+                                html.escape(str(row.get('final_primary_tag', ''))),
+                                _utils.finite_float(row.get('recommended_period_days'), np.nan),
+                                html.escape(str(row.get('final_secondary_tags', ''))), link])
+            latest = _utils.bool_series(subset['is_latest_batch']) if 'is_latest_batch' in subset else pd.Series(False, index=subset.index)
+            chart.add_trace(go.Scatter(x=subset[x_col], y=subset[y_col], mode='markers',
+                name='%s (N=%d; %.1f%%)' % (category.replace('_', ' ').title(), len(subset), 100 * len(subset) / total),
+                legendgroup=dataset if markers else category,
+                legendgrouptitle_text=("Dataset: " + dataset) if markers else None,
+                customdata=details,
+                marker={'size': 10, 'symbol': markers.get(dataset, 'circle'), 'color': colours.get(category, '#333333'), 'opacity': .85,
+                        'line': {'color': 'black', 'width': [2.5 if outline_new and value else 0 for value in latest]}},
+                hovertemplate='Source: %{customdata[0]}<br>Dataset: %{customdata[1]}<br>Class: %{customdata[2]}<br>Recommended P: %{customdata[3]:.6g} d<br>Tags: %{customdata[4]}<extra></extra>'))
+    for source_id, label in (highlights or {}).items():
+        block = table.loc[table.source_id.astype(str).map(_utils.clean_source_id).eq(_utils.clean_source_id(source_id))]
+        if not block.empty:
+            point_details = []
+            for _, row in block.iterrows():
+                sid = _utils.clean_source_id(row.get('source_id', ''))
+                picture = _source_phase_plot_path(version_dir, sid)
+                link = quote(os.path.relpath(picture, maps).replace(os.sep, '/'), safe='/') if picture else ''
+                point_details.append([html.escape(sid), html.escape(str(row.get('dataset', ''))),
+                    html.escape(str(row.get('final_primary_tag', ''))),
+                    _utils.finite_float(row.get('recommended_period_days'), np.nan),
+                    html.escape(str(row.get('final_secondary_tags', ''))), link])
+            chart.add_trace(go.Scatter(x=block[x_col], y=block[y_col], mode='markers',
+                customdata=point_details, name=str(label), marker={'size': 18, 'symbol': 'star', 'color': '#FFD54F',
+                                         'line': {'color': 'black', 'width': 1.5}}, hoverinfo='skip'))
+    chart.update_layout(title=title, xaxis_title='UMAP 1', yaxis_title='UMAP 2',
+                        template='plotly_white', height=750, legend={'groupclick': 'togglegroup'},
+                        margin={'l': 60, 'r': 30, 't': 90, 'b': 50})
+    script = """
+const graph = document.getElementById('{plot_id}');
+const panel = document.createElement('section');
+panel.id = graph.id + '-comparison';
+panel.style.cssText = 'font:15px sans-serif;margin:20px';
+const heading = document.createElement('h2');
+heading.textContent = 'Compare selected light curves';
+const help = document.createElement('p');
+help.textContent = 'Click points to add previews below, or select several with the lasso/box tool. Click an image to open it at full size.';
+const clear = document.createElement('button');
+clear.textContent = 'Clear selection';
+clear.disabled = true;
+const status = document.createElement('span');
+status.style.marginLeft = '12px';
+status.setAttribute('aria-live', 'polite');
+const board = document.createElement('div');
+board.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px;margin-top:16px';
+const selected = new Map();
+function updateCount() {
+    status.textContent = selected.size + ' selected';
+    clear.disabled = selected.size === 0;
+}
+clear.addEventListener('click', function() {
+    selected.clear(); board.replaceChildren(); updateCount();
+});
+panel.append(heading, help, clear, status, board);
+graph.after(panel);
+function addPreview(detail) {
+    if (!detail) return;
+    const key = JSON.stringify([detail[1], detail[0]]);
+    if (selected.has(key)) return;
+    const card = document.createElement('article');
+    card.className = 'groove-preview-card';
+    card.style.cssText = 'border:1px solid #aaa;border-radius:6px;padding:12px;min-width:0;background:white';
+    const caption = document.createElement('p');
+    caption.textContent = 'Source ' + detail[0] + ' | ' + detail[1] + ' | ' + detail[2] + ' | P = ' + detail[3] + ' d';
+    const remove = document.createElement('button');
+    remove.textContent = 'Remove';
+    remove.setAttribute('aria-label', 'Remove source ' + detail[0]);
+    remove.addEventListener('click', function() {
+        selected.delete(key); card.remove(); updateCount();
+    });
+    card.append(caption, remove);
+    if (detail[5]) {
+        const link = document.createElement('a');
+        link.href = detail[5]; link.target = '_blank'; link.rel = 'noopener';
+        const picture = document.createElement('img');
+        picture.src = detail[5]; picture.alt = 'Phase plot for ' + detail[0];
+        picture.style.cssText = 'display:block;width:100%;height:auto;margin-top:8px';
+        picture.addEventListener('error', function() {
+            picture.style.display = 'none';
+            const missing = document.createElement('p');
+            missing.textContent = 'Preview unavailable. Keep this HTML with its source_plots folder.';
+            link.after(missing);
+        }, {once:true});
+        link.appendChild(picture); card.appendChild(link);
+    } else {
+        const missing = document.createElement('p');
+        missing.textContent = 'No saved phase plot is available for this source.';
+        card.appendChild(missing);
+    }
+    selected.set(key, card); board.appendChild(card); updateCount();
+}
+graph.on('plotly_click', function(event) {
+    (event.points || []).forEach(point => addPreview(point.customdata));
+});
+graph.on('plotly_selected', function(event) {
+    if (event) (event.points || []).forEach(point => addPreview(point.customdata));
+});
+updateCount();
+"""
+    output = maps / (base_name + '_interactive.html')
+    temporary = output.with_suffix('.html.tmp')
+    try:
+        chart.write_html(str(temporary), include_plotlyjs=True, full_html=True, post_script=script)
+        temporary.replace(output)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def build_category_appendix(table: pd.DataFrame, fold_paths: Mapping[str, Path],
                             version_dir: Path, config: Mapping[str, Any],
                             logger: logging.Logger) -> None:
     """3x3 contact sheets per category, ranked by strength, strongest page first."""
-    out = Path(version_dir) / "appendix"
+    out = _persistence.figure_directory(version_dir) / "appendix"
     out.mkdir(parents=True, exist_ok=True)
     per_page = int(config.get("appendix_per_page", 9))
     max_pages = int(config.get("appendix_max_pages", 0))
@@ -480,7 +687,7 @@ def generate_plots(records: Sequence[Mapping[str, Any]], table: pd.DataFrame,
     still have full feature caches.
     """
     cache_by_key = {str(r["summary"]["source_key"]): r.get("cache_path") for r in records}
-    phase_dir = Path(version_dir) / "source_plots" / "phase_folded"
+    phase_dir = _persistence.figure_directory(version_dir) / "source_plots" / "phase_folded"
     phase_dir.mkdir(parents=True, exist_ok=True)
     n_jobs = int(config.get("n_jobs", -1))
 
@@ -550,7 +757,7 @@ def generate_phase_fold_products(sources: Mapping[str, Mapping[str, Any]],
                                  force: bool = False
                                  ) -> Tuple[Dict[str, Path], pd.DataFrame]:
     """Generate/resume one accepted-band double-phase image per catalogue row."""
-    output_dir = Path(version_dir) / "source_plots" / "phase_folded"
+    output_dir = _persistence.figure_directory(version_dir) / "source_plots" / "phase_folded"
     output_dir.mkdir(parents=True, exist_ok=True)
     by_source_id = {str(source.get("source_id", key)): source
                     for key, source in sources.items()}
@@ -615,7 +822,7 @@ def phase_fold_plot_only(config: Dict[str, Any], args: argparse.Namespace) -> Di
                          ", ".join(missing_columns))
 
     # Record immutable UMAP product signatures before doing any plotting.
-    umap_products = list((Path(version_dir) / "maps").glob("all_families_*umap.*"))
+    umap_products = list((_persistence.figure_directory(version_dir) / "maps").glob("all_families_*umap.*"))
     umap_signatures = {path: (path.stat().st_size, path.stat().st_mtime_ns)
                        for path in umap_products}
     protected_columns = [column for column in (
@@ -683,7 +890,7 @@ def phase_fold_plot_only(config: Dict[str, Any], args: argparse.Namespace) -> Di
 
 
 def _source_phase_plot_path(version_dir: Path, source_id: str) -> str:
-    path = (Path(version_dir) / "source_plots" / "phase_folded" /
+    path = (_persistence.figure_directory(version_dir) / "source_plots" / "phase_folded" /
             ("%s__phase_fold.png" % _utils.safe_name(source_id)))
     return str(path) if path.exists() else ""
 
@@ -693,7 +900,7 @@ def make_neighbour_phase_grid(table: pd.DataFrame, source_keys: Sequence[str],
                               records: Mapping[str, Mapping[str, Any]],
                               version_dir: Path, output: Path,
                               source_label: str, period_factor: float = 1.0) -> None:
-    """Make a compact 3x3 O-band grid using each source's own recommended period."""
+    """Make a 3x3 grid of accepted bands at each source's recommended period."""
     lookup = table.set_index(table["source_key"].astype(str), drop=False)
     high = neighbour_table.loc[
         neighbour_table["space"].eq("standardised_combined_feature_space")]
@@ -773,7 +980,7 @@ def make_detached_family_map(table: pd.DataFrame, version_dir: Path,
     ax.grid(alpha=0.25)
     ax.legend(handles=handles, loc="best", fontsize=9)
     fig.tight_layout()
-    maps = version_dir / "maps"
+    maps = _persistence.figure_directory(version_dir) / "maps"
     maps.mkdir(parents=True, exist_ok=True)
     fig.savefig(maps / (output_base + ".png"), dpi=170)
     fig.savefig(maps / (output_base + ".pdf"))

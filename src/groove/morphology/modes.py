@@ -89,24 +89,7 @@ def finalise(table: pd.DataFrame, version_dir: Path, config: Mapping[str, Any],
     _plots.build_neighbour_review_pages(
         neighbour_details, table, fold_paths, version_dir, logger)
 
-    if bool(config.get("make_maps", True)):
-        _plots.make_static_map(table, "combined_umap_1", "combined_umap_2",
-                        "Combined morphology UMAP — unsupervised and label-blind",
-                        "all_families_combined_unsupervised_umap",
-                        version_dir, colours, outline_new)
-        _plots.make_static_map(table, "periodic_umap_1", "periodic_umap_2",
-                        "Periodic morphology UMAP",
-                        "all_families_periodic_umap",
-                        version_dir, colours, outline_new)
-        _plots.make_static_map(table, "transient_umap_1", "transient_umap_2",
-                        "Transient/evolution UMAP",
-                        "all_families_transient_umap",
-                        version_dir, colours, outline_new)
-        _plots.make_static_map(table, "classification_evidence_umap_1",
-                        "classification_evidence_umap_2",
-                        "Classification-evidence UMAP — derived from continuous morphology scores",
-                        "all_families_classification_evidence_umap",
-                        version_dir, colours, outline_new)
+    _plots.draw_overview_maps(table, version_dir, config, colours, outline_new)
     if bool(config.get("make_maps", True)):
         _plots.build_family_maps(records, table, version_dir, output_config, logger, fold_paths)
 
@@ -122,6 +105,7 @@ def finalise(table: pd.DataFrame, version_dir: Path, config: Mapping[str, Any],
     _outputs.write_tables(table, version_dir, extra, config)
     counts = table["final_primary_tag"].value_counts().to_dict()
     logger.info("Category counts: %s", json.dumps(counts))
+    logger.info("Morphology plots: %s", _persistence.figure_directory(version_dir))
 
 
 def fit_or_refit(config: Dict[str, Any], args: argparse.Namespace, mode: str) -> Dict[str, Any]:
@@ -485,7 +469,7 @@ def highlight_source_mode(config: Dict[str, Any], args: argparse.Namespace) -> D
     addon_base = "%s_%s_highlighted" % (original_base, _utils.safe_name(label))
     _plots.make_static_map(
         table, x_col, y_col, "%s - %s highlighted" % (title, label),
-        addon_base, version_dir, colours, False, {source_id: label})
+        addon_base, version_dir, colours, False, {source_id: label}, config.get("dataset_markers", {}))
 
     neighbour_count = max(1, min(int(args.nearest_neighbours or 8), 8))
     neighbours, panel_keys = _embedding.frozen_source_neighbours(
@@ -498,12 +482,10 @@ def highlight_source_mode(config: Dict[str, Any], args: argparse.Namespace) -> D
     panel_rows = table.set_index(table["source_key"].astype(str), drop=False).loc[panel_keys]
     selected_ids = panel_rows["source_id"].astype(str).map(_utils.clean_source_id).tolist()
     plot_config = dict(config)
-    plot_config["use_c_band"] = False
-    plot_config["use_o_band"] = True
     records = _loading.load_selected_lightcurves(
         [spec for spec in config.get("datasets", []) if bool(spec.get("process", True))],
         plot_config, selected_ids, logger)
-    addition_dir = version_dir / "maps" / "additions" / _utils.safe_name(label)
+    addition_dir = _persistence.figure_directory(version_dir) / "maps" / "additions" / _utils.safe_name(label)
     _plots.make_neighbour_phase_grid(
         table, panel_keys, neighbours, records, version_dir,
         addition_dir / ("%s_nearest_neighbours_9panel.png" % _utils.safe_name(label)),
@@ -517,7 +499,7 @@ def highlight_source_mode(config: Dict[str, Any], args: argparse.Namespace) -> D
     logger.info("Frozen-map highlight written for %s; existing maps were not changed", label)
     return {
         "version_dir": str(version_dir),
-        "highlight_map": str(version_dir / "maps" / (addon_base + ".png")),
+        "highlight_map": str(_persistence.figure_directory(version_dir) / "maps" / (addon_base + ".png")),
         "neighbour_table": str(neighbour_path),
         "n_neighbours": neighbour_count,
     }
@@ -610,14 +592,19 @@ def umap_families_mode(config: Dict[str, Any], args: argparse.Namespace) -> Dict
             "dbscan_min_samples": min_samples,
             "minimum_retained_family_size": minimum_family_size,
         })
-    summary = pd.DataFrame(summaries)
+    summary = pd.DataFrame(summaries, columns=[
+        'umap_detached_family', 'n_sources', 'n_core_sources',
+        'centroid_umap_1', 'centroid_umap_2', 'minimum_umap_1',
+        'maximum_umap_1', 'minimum_umap_2', 'maximum_umap_2',
+        'dominant_existing_category', 'dbscan_eps', 'dbscan_min_samples',
+        'minimum_retained_family_size'])
     cross = pd.crosstab(
         membership["umap_detached_family"], membership["final_primary_tag"],
         margins=True).reset_index()
     tables = version_dir / "tables"
     _utils.atomic_write_csv(cross, tables / "umap_detached_family_vs_morphology.csv")
 
-    family_root = version_dir / "umap_detached_families"
+    family_root = _persistence.figure_directory(version_dir) / "umap_detached_families"
     family_root.mkdir(parents=True, exist_ok=True)
     for family in family_by_raw.values():
         directory = family_root / family
@@ -727,5 +714,6 @@ def classify_only(config: Dict[str, Any], args: argparse.Namespace) -> Dict[str,
         "flare_event_validation": _classify.flare_event_validation_table(records, table, directory),
     }, config)
     _utils.atomic_write_json(config, directory / "resolved_config.json")
+    logger.info("Morphology plots: %s", _persistence.figure_directory(directory))
     logger.info("Classified %d sources without fitting UMAP; outputs under %s", len(table), directory)
     return {"n_sources": len(table), "output_dir": str(directory)}

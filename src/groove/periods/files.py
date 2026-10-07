@@ -60,10 +60,38 @@ def normal_plot_outputs_are_complete(
         outputs = expected_normal_plot_paths(row)
     except (TypeError, ValueError):
         return False
-    return bool(outputs) and all(
-        output.is_file() and output.stat().st_size > 0
-        for output in outputs
-    )
+    return bool(outputs) and all(output_file_is_complete(output) for output in outputs)
+
+
+def output_file_is_complete(path: Path) -> bool:
+    """Reject interrupted/corrupt PNGs rather than trusting a nonzero size."""
+    if not path.is_file() or path.stat().st_size <= 0:
+        return False
+    if path.suffix.lower() == '.png' or path.name.lower().endswith('.png.tmp'):
+        from PIL import Image
+        try:
+            with Image.open(path) as picture:
+                picture.verify()
+        except (OSError, SyntaxError, ValueError):
+            return False
+    return True
+
+
+def save_figure(fig, path: Path, **kwargs) -> None:
+    """Publish a PNG only after its complete temporary file validates."""
+    import os
+    import tempfile
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, name = tempfile.mkstemp(prefix=path.stem + '_', suffix=path.suffix + '.tmp', dir=path.parent)
+    os.close(descriptor)
+    temporary = Path(name)
+    try:
+        fig.savefig(temporary, format=path.suffix.lstrip('.'), **kwargs)
+        if not output_file_is_complete(temporary):
+            raise OSError(f'Plot did not validate: {path}')
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def record_existing_normal_plot_paths(row: dict[str, Any]) -> None:
@@ -128,7 +156,7 @@ def completed_run_is_unchanged(signature: str) -> bool:
         if state.get("signature") != signature:
             return False
         outputs = [Path(value) for value in state.get("output_files", [])]
-        return bool(outputs) and all(path.is_file() and path.stat().st_size > 0 for path in outputs)
+        return bool(outputs) and all(output_file_is_complete(path) for path in outputs)
     except Exception:
         return False
 
@@ -143,7 +171,8 @@ def mark_run_complete(signature: str) -> None:
         for root in [table_dir, S.plot_root()]
         if root.is_dir()
         for path in root.rglob("*")
-        if path.is_file() and path.resolve() not in {marker.resolve(), tmp.resolve()}
+        if path.is_file() and not path.name.endswith('.tmp')
+        and path.resolve() not in {marker.resolve(), tmp.resolve()}
     )
     state = {
         "signature": signature,

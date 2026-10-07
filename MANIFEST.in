@@ -3,3 +3,4 @@ recursive-include configs *.yaml
 recursive-include docs *.md
 recursive-include data *.md *.csv
 recursive-include tests *.py
+recursive-include tools *.py *.sh

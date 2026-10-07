@@ -88,8 +88,10 @@ files produce an error rather than a misleading selected-source count.
 
 ## Periods
 
-The main search uses a weighted Lomb–Scargle periodogram for combined,
-orange and cyan series, with per-band centring in the combined series. The
+The main search defaults to weighted Lomb–Scargle periodograms for orange
+and cyan separately. Combined photometry is opt-in through `series_to_run`;
+its centring remains per band. `plot_series` independently selects saved series
+plots (see [output options](release_1_0_5.md)). The
 upper period is restricted by the observed baseline and minimum cycle count.
 BLS is an optional diagnostic and does not set the recommendation by default.
 
@@ -132,3 +134,13 @@ The source-level period recommendation is authoritative. Both filters are
 accepted by default. Manual labels use `manual_primary_tag` and
 `manual_secondary_tags`, as shown in `data/manual_labels_template.csv`.
 See [morphology notes](morphology_details.md) for interpretation and persistence.
+
+### Period-review strength
+
+A strong review detection requires the significance check and either
+P1/P2 >= 1.5 or P1/P4 >= 1.8. The latter allows a coherent non-sinusoidal signal
+with a competitive second peak to pass. Alias and harmonic evidence still
+route it to their review folders. These ratios compare peak powers, not period
+values. A strong detection label does not prove that a unique physical period
+or a planetary transit has been identified. This review-rule change does not
+change the computed periodogram, candidate periods or adopted period.

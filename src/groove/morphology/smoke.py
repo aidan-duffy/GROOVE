@@ -100,7 +100,7 @@ def synthetic_lightcurve(kind: str, period: float, seed: int) -> pd.DataFrame:
     elif kind == "incoherent_noisy":
         m += rng.standard_t(2, n) * 0.35
     m = m + rng.normal(0, noise, n)
-    # The revision is intentionally o-band only.
+    # These fixtures use one band; the separate demo exercises both bands.
     band = np.full(n, "o")
     return pd.DataFrame({"time": t, "mag": m, "err": err, "filter": band})
 
@@ -358,22 +358,21 @@ def smoke_test(verbose: bool = False) -> int:
                 version_dir / "tables" / "blind_validation_sample.csv",
                 version_dir / "tables" / "blind_validation_key.csv",
                 version_dir / "tables" / "membership_table_index.csv",
-                version_dir / "maps" / "all_families_combined_unsupervised_umap.png",
-                version_dir / "maps" / "all_families_combined_unsupervised_umap.pdf",
-                version_dir / "maps" / "all_families_periodic_umap.png",
-                version_dir / "maps" / "all_families_transient_umap.png",
-                version_dir / "maps" / "all_families_classification_evidence_umap.png",
-                version_dir / "maps" / "strongest_family_examples.png",
-                version_dir / "maps" / "representative_family_examples.png",
-                version_dir / "maps" / "representative_families" /
+                _persistence.figure_directory(version_dir) / "maps" / "all_families_combined_unsupervised_umap.png",
+                _persistence.figure_directory(version_dir) / "maps" / "all_families_combined_unsupervised_umap.pdf",
+                _persistence.figure_directory(version_dir) / "maps" / "all_families_periodic_umap.png",
+                _persistence.figure_directory(version_dir) / "maps" / "all_families_classification_evidence_umap.png",
+                _persistence.figure_directory(version_dir) / "maps" / "strongest_family_examples.png",
+                _persistence.figure_directory(version_dir) / "maps" / "representative_family_examples.png",
+                _persistence.figure_directory(version_dir) / "maps" / "representative_families" /
                 "transit_representative_examples.png",
                 version_dir / "models" / "periodic_representation.joblib",
                 version_dir / "models" / "combined_representation.joblib",
                 version_dir / "models" / "classification_evidence_representation.joblib",
                 version_dir / "models" / "combined_validation_space.joblib",
             ]
-            source_images = list((version_dir / "source_plots").rglob("*.png"))
-            primary_images = list((version_dir / "category_folds" / "primary").rglob("*.png"))
+            source_images = list((_persistence.figure_directory(version_dir) / "source_plots").rglob("*.png"))
+            primary_images = list((_persistence.figure_directory(version_dir) / "category_folds" / "primary").rglob("*.png"))
             blind_columns = pd.read_csv(
                 version_dir / "tables" / "blind_validation_sample.csv", nrows=1).columns
             checks.append(("end-to-end outputs and saved models", all(
@@ -381,9 +380,9 @@ def smoke_test(verbose: bool = False) -> int:
                 and len(source_images) <= len(records)
                 and len(primary_images) == len(records)
                 and "final_primary_tag" not in blind_columns
-                and not (version_dir / "review_plots").exists()
-                and not (version_dir / "review_folders").exists()
-                and not (version_dir / "maps" / "family_centroids.png").exists()))
+                and not (_persistence.figure_directory(version_dir) / "review_plots").exists()
+                and not (_persistence.figure_directory(version_dir) / "review_folders").exists()
+                and not (_persistence.figure_directory(version_dir) / "maps" / "family_centroids.png").exists()))
     except Exception as error:
         logger.error("End-to-end smoke check failed: %s", error, exc_info=verbose)
         checks.append(("end-to-end outputs and saved models", False))

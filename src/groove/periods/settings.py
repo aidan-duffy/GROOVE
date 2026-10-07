@@ -42,7 +42,9 @@ CATALOG_PERIOD_COLUMN = "period_days"
 SKIP_ALREADY_PROCESSED = True
 CHECKPOINT_EVERY_N_FILES = 500
 MAX_FILES: int | None = None
-SERIES_TO_RUN = ["combined", "o", "c"]
+SERIES_TO_RUN = ["o", "c"]
+# Independent saving selection; combined is opt-in for both analysis and plots.
+PLOT_SERIES = ["o", "c"]
 ALLOWED_BANDS = {"c", "o"}
 
 MIN_POINTS = 50

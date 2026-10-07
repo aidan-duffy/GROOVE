@@ -71,7 +71,10 @@ classification-only results, rerun `classify`.
 feature weighting, optional PCA and UMAP. It writes combined, periodic,
 transient and classification-evidence representations. The evidence map uses
 continuous category scores and should be interpreted separately from the
-unsupervised shape maps.
+unsupervised shape maps. Three overview maps are saved by default: evidence,
+overall similarity (combined features), and periodic shape. Add `transient` to
+`maps_to_plot` to save the fourth; all internal representations remain available.
+The evidence map summarises the rules and does not independently validate them.
 
 Later batches use `transform` with the same morphology `output_root` and model
 version. A configuration/schema mismatch raises an error; create a new reference

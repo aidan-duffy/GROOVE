@@ -154,6 +154,11 @@ force_recompute_features: false
 # that image is unavailable, then hard-links it into the primary family folder.
 # Secondary/review memberships are CSV manifests rather than extra image trees.
 make_maps: true
+# Three overview maps; transient is optional. Internal saved models remain available.
+maps_to_plot: [classification_evidence, combined, periodic]
+# Dataset names match run.yaml name; unspecified datasets remain circles.
+# Options: circle, square, diamond, triangle-up, triangle-down, cross, x, star, hexagon.
+dataset_markers: {}
 make_review_plots: false
 make_category_folds: true
 make_category_appendix: true

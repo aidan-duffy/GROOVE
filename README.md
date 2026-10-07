@@ -18,6 +18,20 @@ the detailed analysis rather than reducing it to a single periodogram or
 embedding. Automatic labels are review suggestions; a `transit` label describes
 shape and does not establish a planetary interpretation.
 
+## Find your workflow
+
+- [Download ATLAS targets](#analyse-your-targets)
+- [Use your existing data and skip stages](docs/data_workflows.md#existing-raw-atlas-photometry-skip-downloading)
+- [Run each stage separately](docs/data_workflows.md#run-stage-by-stage)
+- [Resume from cleaned/selected data](docs/data_workflows.md#resume-at-a-later-stage)
+- [Add a second sample to the same map](#add-targets-to-an-existing-map)
+- [Dataset shapes, star highlighting and side-by-side comparison](docs/map_controls.md)
+- [Configuration options and defaults](docs/configuration.md)
+- [What other surveys would require](docs/data_workflows.md#other-surveys-adaptation-not-currently-validated-support)
+
+Version 1.0.6 keeps O/C-only period searches and three default overview maps.
+Dataset shapes are optional. Saved maps can be redrawn without refitting.
+
 ## Install
 
 Use Python **3.10–3.12**. Open a terminal in the extracted `GROOVE` folder:
@@ -44,6 +58,7 @@ Alternatively, `conda env create -f environment.yml`, followed by
 ```bash
 groove demo groove_demo
 groove run -c groove_demo/run.yaml --skip-download
+groove demo-check groove_demo
 ```
 
 This creates 12 seeded synthetic stars with wavelike, dipping and constant
@@ -171,10 +186,10 @@ CSV and Gaia ID must be replaced with your real values.
 | `2_clean/selected/` | Passing light curves and `selected_sources.csv` |
 | `3_periods/tables/source_period_recommendations.csv` | Adopted period and diagnostics per source |
 | `plots/clean/`, `plots/periods/` | Cleaning and period-search figures |
-| `4_morphology/model_versions/model_<version>/` | Fitted models, tables, maps and source plots |
+| `4_morphology/saved_runs/<run>/` | Fitted models, tables and caches |
 | `4_morphology/classification/` | Tables and source plots for `mode: classify` |
 
-An unnamed model lives directly under `4_morphology/model_versions/`.
+Morphology figures live in `plots/ML/<run>/`, including maps, phase folds, category folders and appendix figures. An unnamed run uses `default`; classification-only plots use `plots/ML/classification/`. Older saved models can still be loaded.
 Start with the period recommendation table and morphology `tables/all_sources.csv`.
 Open `maps/*interactive.html` in a browser. Keep the surrounding output tree
 with the HTML so linked images remain accessible.
@@ -199,6 +214,29 @@ Fit the reference with `model_version: reference_v1` first. Frozen preprocessing
 and UMAP are reused; changing representation settings requires a new fit.
 Existing source IDs are skipped by default. `current_model.json` identifies the
 current reference when no version is specified.
+
+## Find a new sample and compare individual light curves
+
+```yaml
+morphology:
+  dataset_markers:
+    my_sample: circle
+    new_batch: diamond
+  outline_new_sources: true
+```
+
+Dataset names match each configuration's top-level `name`. Omit dataset_markers
+for identical circles. Colours remain morphology labels; shapes identify samples.
+To update maps after a batch has already been added:
+
+```bash
+groove morphology -c configs/new_batch.yaml -- --mode map-only
+```
+
+This redraws saved maps without recomputing scientific results. In the interactive
+map, click several stars (or use lasso/box selection) to compare phase images side
+by side below it. Remove individual previews or clear the selection. See
+[map controls](docs/map_controls.md) for shapes, legends and single-star highlighting.
 
 ## Settings and scientific interpretation
 
@@ -243,3 +281,28 @@ required for installation and are not included in this distribution.
 
 `CITATION.cff` supplies citation metadata. Include the acknowledgements required
 by the ATLAS service when publishing analyses. Licence: MIT.
+
+## Extended demonstration and Linux validation
+
+For alias, harmonic, flare, irregular/evolving and single-filter examples:
+
+```bash
+python -m groove demo demo_extended --extended
+python -m groove run -c demo_extended/run.yaml --skip-download
+python -m groove demo-check demo_extended
+```
+
+This contains 24 artificial sources. Read `demo_extended/CASE_GUIDE.md` and
+inspect `demo_source_review.csv`; injected behaviours are not forced labels.
+Automatic alias folds and BLS are enabled for this demonstration. The default
+12-source demo and its seeded raw observations remain unchanged.
+
+Follow [the Linux/WSL validation guide](docs/linux_validation.md) to test each
+stage, saved-model operations and one authenticated real download. The tools
+folder includes download-integrity and original-function comparison helpers.
+
+The extended source `3216489845356186519` has a dominant daily systematic and
+an injected 8.3-day stellar wave. Its rank-two stellar peak clears the existing
+replacement threshold, so the automatic alias-candidate figure shows the true
+period being recommended over rank one. This differs from the original daily
+example, which remains flagged because its stellar peak is too weak to promote.

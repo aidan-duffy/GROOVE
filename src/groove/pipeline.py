@@ -79,6 +79,12 @@ def run_periods(cfg: Config) -> None:
     S.OUTPUT_DIR = cfg.periods_dir
     S.PLOT_DIR = cfg.period_plots
     apply_overrides(S, cfg.periods, "periods")
+    for key in ("SERIES_TO_RUN", "PLOT_SERIES"):
+        value = getattr(S, key)
+        if not isinstance(value, (list, tuple)) or any(s not in {"o", "c", "combined"} for s in value):
+            raise ValueError(f"periods.{key.lower()} must be a list containing o, c or combined")
+        if key == "SERIES_TO_RUN" and not value:
+            raise ValueError("periods.series_to_run must contain at least one series")
     overridden = {k.lower() for k in cfg.periods}
     if "plot_time_segment_colors" not in overridden:
         S.PLOT_TIME_SEGMENT_COLORS = S.PLOT_TIME_COLOR_PALETTE[:int(S.PLOT_TIME_SEGMENTS)]

@@ -34,7 +34,7 @@ def test_download_resume_completed_and_metadata(download_config, monkeypatch):
     obj = fake_client(monkeypatch)
     assert pipeline.run_download(download_config) == 0
     assert obj.submit_job.call_count == 2
-    files = list(download_config.raw_lightcurves.glob('*.csv'))
+    files = sorted(download_config.raw_lightcurves.glob('*.csv'))
     assert len(files) == 2
     assert pd.read_csv(files[0], dtype=str)['target_GaiaDR3'][0] == '3216489845356186496'
     obj.reset_mock()
@@ -129,3 +129,28 @@ def test_client_full_history_payload_and_csv_parsing(monkeypatch):
     response.text = '<html>server error</html>'
     with pytest.raises(client.PermanentJobError, match='MJD'):
         obj.download_result('/result.txt')
+
+
+def test_simulated_download_reaches_final_scientific_outputs(download_config, monkeypatch, tmp_path):
+    from test_pipeline import synthetic_raw
+    raw = tmp_path / 'api_fixture'
+    raw.mkdir()
+    synthetic_raw(raw, n=500)
+    response = pd.read_csv(next(raw.glob('*.csv')), dtype=str)
+    obj = fake_client(monkeypatch)
+    obj.download_result.return_value = response
+    download_config.clean = {'make_summary_plots': False, 'make_reason_plot': False,
+                             'make_example_plots': False}
+    download_config.periods = {'max_period_days': 30, 'run_bls': False,
+                               'plot_mode': 'none', 'auto_plot_harmonic_suspects': False}
+    download_config.morphology = {'mode': 'classify', 'n_jobs': 1}
+    pipeline.run_all(download_config)
+    periods = pd.read_csv(download_config.periods_dir / 'tables/source_period_recommendations.csv',
+                          dtype={'source_id': str})
+    morphology = pd.read_csv(download_config.morphology_dir / 'classification/tables/all_sources.csv',
+                             dtype={'source_id': str})
+    expected = {'3216489845356186496', '3216489845356186497'}
+    assert set(periods.source_id) == set(morphology.source_id) == expected
+    assert ((periods.recommended_period_days / 12.7 - 1).abs() < .01).all()
+    assert morphology.final_primary_tag.eq('wavelike').all()
+    assert obj.submit_job.call_count == 2

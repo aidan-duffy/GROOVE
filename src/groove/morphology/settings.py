@@ -16,6 +16,22 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_CONFIG_PATH = SCRIPT_DIR / "defaults.yaml"
 FEATURE_SCHEMA_VERSION = "atlas-umap-morphology-v3.2"
 
+DEFAULT_MAPS = ("classification_evidence", "combined", "periodic")
+MAP_DEFINITIONS = {
+    "combined": ("combined_umap", "Light-curve similarity UMAP — unsupervised and label-blind", "all_families_combined_unsupervised_umap"),
+    "periodic": ("periodic_umap", "Periodic-shape UMAP — unsupervised and label-blind", "all_families_periodic_umap"),
+    "transient": ("transient_umap", "Transient/evolution UMAP — unsupervised and label-blind", "all_families_transient_umap"),
+    "classification_evidence": ("classification_evidence_umap", "Classification-evidence UMAP — rule-derived scores, not independent validation", "all_families_classification_evidence_umap"),
+}
+
+
+def selected_maps(config):
+    maps = config.get("maps_to_plot", list(DEFAULT_MAPS))
+    if not isinstance(maps, (list, tuple)) or any(name not in MAP_DEFINITIONS for name in maps):
+        raise ValueError("maps_to_plot must be a list of classification_evidence, combined, periodic or transient")
+    return list(dict.fromkeys(maps))
+
+
 PRIMARY_CATEGORIES = (
     "transit", "wavelike", "flaring", "irregular_variable",
     "nonvar", "noisy", "unknown",
@@ -73,7 +89,7 @@ DEFAULTS: Dict[str, Any] = {
     "batch_id": None,
     "random_seed": 42,
     "datasets": [],
-    "use_c_band": True,   # o band only
+    "use_c_band": True,
     "use_o_band": True,
     "minimum_observations": 50,
     "minimum_phase_coverage": 0.30,
@@ -102,6 +118,8 @@ DEFAULTS: Dict[str, Any] = {
     "ood_quantile": 0.99,
     "evolution_quantile": 0.95,
     "make_maps": True,
+    "maps_to_plot": list(DEFAULT_MAPS),
+    "dataset_markers": {},
     "run_umap_parameter_comparison": False,
     "neighbour_anchor_sources": [],
     "nearest_reference_neighbours": 5,

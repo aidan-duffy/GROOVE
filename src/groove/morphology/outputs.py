@@ -9,6 +9,7 @@ import pandas as pd
 from . import classify as _classify
 from . import loading as _loading
 from . import utils as _utils
+from . import persistence as _persistence
 
 
 
@@ -84,8 +85,8 @@ def build_category_folders(table: pd.DataFrame, fold_paths: Mapping[str, Path],
     morphology workflow ``fold_paths`` contains accepted-band phase folds; reruns
     preserve correct hard links and fill only missing entries.
     """
-    root = Path(version_dir) / "category_folds"
-    interest_root = Path(version_dir) / "interest"
+    root = _persistence.figure_directory(version_dir) / "category_folds"
+    interest_root = _persistence.figure_directory(version_dir) / "interest"
     allow_copy = bool(config.get("allow_plot_copy_fallback", False))
     missing: List[Dict[str, Any]] = []
     memberships: List[Dict[str, Any]] = []

@@ -6,6 +6,19 @@ from . import settings as S
 from . import loading as _loading
 
 
+def series_has_peak_dominance(row: pd.Series | dict[str, Any]) -> bool:
+    """Accept either dominance diagnostic, retaining competing-peak warnings.
+
+    A non-sinusoidal signal can have a competitive second peak while its
+    leading peaks remain clearly separated from the broader peak background.
+    """
+    ratio2 = _loading.safe_float(row.get("best_to_second_power_ratio"), np.nan)
+    ratio4 = _loading.safe_float(row.get("best_to_fourth_power_ratio"), np.nan)
+    return bool(
+        (np.isfinite(ratio2) and ratio2 >= S.STRONG_BEST_SECOND_RATIO)
+        or (np.isfinite(ratio4) and ratio4 >= S.STRONG_BEST_FOURTH_RATIO)
+    )
+
 
 
 def series_is_significant(row: pd.Series | dict[str, Any] | None) -> bool:
@@ -21,16 +34,11 @@ def series_is_significant(row: pd.Series | dict[str, Any] | None) -> bool:
     fap = _loading.safe_float(row.get("raw_ls_fap"), np.nan)
     peak_snr = _loading.safe_float(row.get("ls_peak_snr"), np.nan)
     fold_snr = _loading.safe_float(row.get("raw_fold_amp_snr"), np.nan)
-    ratio2 = _loading.safe_float(row.get("best_to_second_power_ratio"), np.nan)
-    ratio4 = _loading.safe_float(row.get("best_to_fourth_power_ratio"), np.nan)
 
     fap_ok = np.isfinite(fap) and fap <= S.FAP_THRESHOLD
     peak_ok = np.isfinite(peak_snr) and peak_snr >= S.PERIODOGRAM_SNR_THRESHOLD
     fold_ok = np.isfinite(fold_snr) and fold_snr >= S.FOLD_SNR_THRESHOLD
-    dominance_ok = bool(
-        (np.isfinite(ratio2) and ratio2 >= S.STRONG_BEST_SECOND_RATIO)
-        or (np.isfinite(ratio4) and ratio4 >= S.STRONG_BEST_FOURTH_RATIO)
-    )
+    dominance_ok = series_has_peak_dominance(row)
 
     # Accept either a statistically significant dominant peak, or a coherent
     # folded signal with periodogram support.
@@ -62,13 +70,9 @@ def classify_series_detection(
     single_filter_only: bool = False,
 ) -> tuple[str, str]:
     """Return independent detection strength and at most two series warnings."""
-    ratio2 = _loading.safe_float(row.get("best_to_second_power_ratio"), np.nan)
     ratio4 = _loading.safe_float(row.get("best_to_fourth_power_ratio"), np.nan)
     significant = series_is_significant(row)
-    dominant = bool(
-        np.isfinite(ratio2) and ratio2 >= S.STRONG_BEST_SECOND_RATIO
-        and np.isfinite(ratio4) and ratio4 >= S.STRONG_BEST_FOURTH_RATIO
-    )
+    dominant = series_has_peak_dominance(row)
     flat_periodogram = bool(np.isfinite(ratio4) and ratio4 <= S.NONVAR_TOP4_MAX_RATIO)
     alias_flag = bool(
         _loading.safe_float(row.get("raw_alias_score"), np.nan) >= S.ALIAS_SCORE_THRESHOLD
@@ -81,7 +85,7 @@ def classify_series_detection(
     )
     if not significant and flat_periodogram:
         primary = "nonvar"
-    elif flat_periodogram or not dominant:
+    elif not significant or flat_periodogram or not dominant:
         primary = "weak_or_ambiguous"
     elif alias_flag:
         primary = "alias_possible"
