@@ -1,4 +1,4 @@
-# GROOVE
+# GROOVE: Grouping of Rare and Odd Objects via Variability Exploration
 
 **Author:** Aidan Duffy
 
