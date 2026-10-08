@@ -91,7 +91,7 @@ files produce an error rather than a misleading selected-source count.
 The main search defaults to weighted Lomb–Scargle periodograms for orange
 and cyan separately. Combined photometry is opt-in through `series_to_run`;
 its centring remains per band. `plot_series` independently selects saved series
-plots (see [output options](release_1_0_5.md)). The
+plots (see [output options](configuration.md#plot-and-filter-selection)). The
 upper period is restricted by the observed baseline and minimum cycle count.
 BLS is an optional diagnostic and does not set the recommendation by default.
 

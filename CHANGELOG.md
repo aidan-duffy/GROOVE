@@ -1,3 +1,11 @@
+# Changelog
+
+## Unreleased
+
+- Reorder README around installation, demonstration and common workflows; add citation and feedback guidance.
+- Consolidate documentation into stable guides, one validation page and this changelog.
+- Windows compatibility patch: acquire the token lock before accessing its byte range; explicitly read generated HTML as UTF-8 in tests; test lock release after errors. Native Windows verification is pending.
+
 # Changes in 1.0.9
 
 - Automatic, content-checked completion receipts for all CLI stages and full-pipeline resume.
@@ -18,6 +26,22 @@
 - Preserve long source IDs as text in reference summaries.
 - Document fresh, contained period-stage retesting and original-reference comparison.
 - Raw LS/BLS computations and classification thresholds are unchanged by this release.
+
+# Changes in 1.0.7
+
+- Bound interactive comparison-card sizes, wrap previews into rows and enable map zoom/pan/reset controls.
+- Preserve saved map coordinates and scientific results when redrawing.
+
+# Changes in 1.0.6
+
+- Add optional dataset shapes, new-batch outlines and side-by-side phase-image comparison.
+- Document stage-by-stage, existing-data and frozen-map workflows.
+
+# Changes in 1.0.5
+
+- Default to O/C-only period searches and independently selectable plot series; combined analysis remains optional.
+- Export three default overview maps while retaining internal representations.
+- Removing combined analysis can change alias learning and adopted periods; it is not merely an output-saving change.
 
 # Changes in 1.0.4
 

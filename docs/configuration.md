@@ -1,7 +1,7 @@
 # Configuration options: where to start
 
 Generate a commented starting file with `groove init configs/my_sample.yaml`.
-Every command's -c/--config argument chooses this YAML. File paths are relative
+Analysis commands use -c/--config to choose this YAML. File paths are relative
 to the YAML file, not the terminal's current directory. Keep stage overrides in
 one section each; duplicate YAML sections can silently replace earlier settings.
 
@@ -59,7 +59,7 @@ normally supplied by the pipeline; prefer top-level input_folder/output_folder.
 Scientific cut and rule thresholds require sample-specific validation.
 
 [Stage details](stages.md), [morphology details](morphology_details.md),
-[plot selection](release_1_0_5.md), [map controls](map_controls.md), and
+[plot selection](configuration.md#plot-and-filter-selection), [map controls](map_controls.md), and
 [data workflows](data_workflows.md) explain effects and worked examples.
 
 ## Restart controls
@@ -68,3 +68,49 @@ Resume is automatic for the full pipeline and individual stages. `--rerun`
 forces recalculation for the requested command; it is a CLI flag, not a YAML
 key. Source journals supplement the period full-table checkpoint interval.
 See [restart behaviour](restarts.md) for scope, plotting and migration details.
+
+## Plot and filter selection
+
+Period analysis and saved plots are independent choices:
+
+```yaml
+periods:
+  series_to_run: [o, c]
+  plot_series: [o, c]
+morphology:
+  maps_to_plot: [classification_evidence, combined, periodic]
+```
+
+Add `combined` to `series_to_run` to analyse combined photometry. Add it to
+`plot_series` only if you also want its period figures. Every plotted series
+must have been analysed. For original-style combined field alias learning:
+
+```yaml
+periods:
+  series_to_run: [combined, o, c]
+  plot_series: [o, c]
+  alias_learning_series: combined
+```
+
+Removing combined analysis can change alias inventories, recommended periods
+and downstream morphology. Removing only combined plots preserves its analysis.
+The default `auto` field learner pools O/C peaks when combined is unavailable;
+that is not equivalent to learning from combined peaks alone.
+
+`plot_mode: none` disables all period-stage plotting. `plot_series: []` disables
+individual-series plots while allowing the master review overview. Automatic
+alias/harmonic figures respect `plot_series`.
+
+Morphology's `combined` map combines periodic and transient feature families;
+it does not refer to combined O/C photometry. Add `transient` to `maps_to_plot`
+for that optional overview, or use `[classification_evidence, combined]` for two
+maps. Internal representations remain available for saved-model and neighbour
+operations; selecting fewer maps reduces exported figures rather than all fits.
+Classification evidence maps embed rule scores and do not independently validate
+classification accuracy. Dataset shapes and zoom are covered in
+[map controls](map_controls.md). Existing HTML needs regeneration to gain new
+controls.
+
+Cleaning supports independent `save_png` and `save_pdf` settings. Output-format
+options differ by stage; there is no universal format switch. See the stage
+settings linked above for supported plotting options.
