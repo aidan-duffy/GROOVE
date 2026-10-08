@@ -25,7 +25,7 @@ PLOT_DIR: Path | None = None    # set by the pipeline config
 # ============================================================================
 
 FILE_GLOB = "*.csv"             # Recommended: all split per-star CSV files.
-OVERWRITE_CLEANED_FILES = True  # Recompute outputs when rerunning with changed cuts.
+OVERWRITE_CLEANED_FILES = True  # Legacy option; validated checkpoints now control reuse. Use --rerun to rebuild.
 PROGRESS_EVERY = 100             # Print progress every N files.
 
 

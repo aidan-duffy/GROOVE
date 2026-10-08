@@ -9,6 +9,7 @@ from pathlib import Path
 import yaml
 
 from .config import Config, apply_overrides
+from .resume import resumable, atomic_json
 
 def _reset(settings):
     # One process can run several configs; no overrides may leak between them.
@@ -27,7 +28,8 @@ def _banner(cfg: Config, stage: str) -> None:
     print(f"\n### groove {stage}  |  {cfg.name}  |  {cfg.output_folder}\n")
 
 
-def run_download(cfg: Config, dry_run: bool = False, limit: int | None = None) -> int:
+@resumable("download")
+def run_download(cfg: Config, dry_run: bool = False, limit: int | None = None, rerun: bool = False) -> int:
     from .download import settings as S, run
     _reset(S)
     _banner(cfg, "download")
@@ -43,6 +45,8 @@ def run_download(cfg: Config, dry_run: bool = False, limit: int | None = None) -
     S.YEARS_TO_DOWNLOAD = cfg.years
     S.ATLAS_MODE = cfg.photometry
     apply_overrides(S, cfg.download, "download")
+    if rerun:
+        S.FORCE_REDOWNLOAD = True
     if dry_run:
         S.DRY_RUN = True
     if limit is not None:
@@ -50,7 +54,8 @@ def run_download(cfg: Config, dry_run: bool = False, limit: int | None = None) -
     return run.main([])
 
 
-def run_clean(cfg: Config) -> None:
+@resumable("clean")
+def run_clean(cfg: Config, rerun: bool = False) -> None:
     from .clean import settings as S, run
     _reset(S)
     _banner(cfg, "clean")
@@ -58,20 +63,24 @@ def run_clean(cfg: Config) -> None:
     S.CLEANED_DIR = cfg.clean_dir
     S.PLOT_DIR = cfg.clean_plots
     apply_overrides(S, cfg.clean, "clean")
+    S.FORCE_RERUN = rerun
     run.main()
 
 
-def run_select(cfg: Config) -> None:
+@resumable("select")
+def run_select(cfg: Config, rerun: bool = False) -> None:
     from .select import settings as S, run
     _reset(S)
     _banner(cfg, "select")
     S.CLEANED_DIR = cfg.clean_dir
     S.SELECTED_DIR = cfg.selected_dir
     apply_overrides(S, cfg.select, "select")
+    S.FORCE_RERUN = rerun
     run.main()
 
 
-def run_periods(cfg: Config) -> None:
+@resumable("periods")
+def run_periods(cfg: Config, rerun: bool = False) -> None:
     from .periods import settings as S, run
     _reset(S)
     _banner(cfg, "periods")
@@ -79,6 +88,12 @@ def run_periods(cfg: Config) -> None:
     S.OUTPUT_DIR = cfg.periods_dir
     S.PLOT_DIR = cfg.period_plots
     apply_overrides(S, cfg.periods, "periods")
+    S.FORCE_RERUN = rerun
+    if rerun:
+        S.SKIP_ALREADY_PROCESSED = False
+        S.SKIP_ALREADY_PLOTTED = False
+    if S.ALIAS_LEARNING_SERIES not in {"auto", "o", "c", "combined"}:
+        raise ValueError("periods.alias_learning_series must be auto, o, c or combined")
     for key in ("SERIES_TO_RUN", "PLOT_SERIES"):
         value = getattr(S, key)
         if not isinstance(value, (list, tuple)) or any(s not in {"o", "c", "combined"} for s in value):
@@ -115,10 +130,14 @@ def morphology_config(cfg: Config) -> dict:
     return base
 
 
-def run_morphology(cfg: Config, extra_args: list[str] | None = None) -> None:
+@resumable("morphology")
+def run_morphology(cfg: Config, extra_args: list[str] | None = None, rerun: bool = False) -> None:
     from .morphology import run
     _banner(cfg, "morphology")
     resolved = morphology_config(cfg)
+    if rerun:
+        resolved.update(force_recompute_features=True, overwrite_existing_model=True,
+                        force_replot_phase_products=True, existing_id_policy="replace")
     cfg.morphology_dir.mkdir(parents=True, exist_ok=True)
     resolved_path = cfg.morphology_dir / f"morphology_config_{cfg.name}.yaml"
     resolved_path.write_text(yaml.safe_dump(resolved, sort_keys=False), encoding="utf-8")
@@ -126,19 +145,25 @@ def run_morphology(cfg: Config, extra_args: list[str] | None = None) -> None:
     _check_result("morphology", run.main(argv))
 
 
-def run_all(cfg: Config, skip_download: bool = False, skip_morphology: bool = False) -> None:
+def run_all(cfg: Config, skip_download: bool = False, skip_morphology: bool = False, rerun: bool = False) -> None:
     stages = []
+    options = {"rerun": True} if rerun else {}
+    manifest = cfg.output_folder / 'pipeline_run.json'
+    def progress(status):
+        atomic_json(manifest, {'name': cfg.name, 'config': str(cfg.source_path),
+                              'stages': list(stages), 'status': status})
+    progress('running')
     if not skip_download:
         if cfg.download.get("dry_run", False):
             raise ValueError("download.dry_run cannot be used with run; use groove download --dry-run")
-        _check_result("download", run_download(cfg))
+        _check_result("download", run_download(cfg, **options))
         stages.append("download")
-    run_clean(cfg)
-    run_select(cfg)
-    run_periods(cfg)
-    stages.extend(["clean", "select", "periods"])
+        progress("running")
+    for stage, function in [('clean', run_clean), ('select', run_select), ('periods', run_periods)]:
+        function(cfg, **options)
+        stages.append(stage)
+        progress('running')
     if not skip_morphology:
-        run_morphology(cfg)
+        run_morphology(cfg, **options)
         stages.append("morphology")
-    (cfg.output_folder / "pipeline_run.json").write_text(json.dumps(
-        {"name": cfg.name, "config": str(cfg.source_path), "stages": stages}, indent=2))
+    progress('complete')

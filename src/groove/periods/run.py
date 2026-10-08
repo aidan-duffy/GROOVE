@@ -7,6 +7,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from . import settings as S
+from .. import resume as R
 from . import aliases as _aliases
 from . import classify as _classify
 from . import files as _files
@@ -148,7 +149,7 @@ def main() -> None:
     # A completion marker is written only after every table and plot succeeds.
     # With unchanged code/config/inputs and intact outputs, a rerun is a true
     # no-op: no files are loaded, printed, plotted, or rewritten.
-    if _files.completed_run_is_unchanged(run_signature):
+    if R.ACTIVE_PRODUCTS is None and not getattr(S, "FORCE_RERUN", False) and _files.completed_run_is_unchanged(run_signature):
         return
 
     S.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -170,24 +171,29 @@ def main() -> None:
         (S.plot_root() / _loading.sanitize_filename(series) / "alias" / S.EXTRA_FOLD_SUBDIR).mkdir(parents=True, exist_ok=True)
         (S.plot_root() / _loading.sanitize_filename(series) / "harmonic" / S.EXTRA_FOLD_SUBDIR).mkdir(parents=True, exist_ok=True)
     signature_path = S.OUTPUT_DIR / "tables" / "analysis_signature.json"
+    analysis_signature = _files.analysis_run_signature(files)
     previous_signature = ""
     if signature_path.exists():
         import json
         previous_signature = json.loads(signature_path.read_text()).get("signature", "")
-    use_cache = S.SKIP_ALREADY_PROCESSED and previous_signature == run_signature
+    use_cache = S.SKIP_ALREADY_PROCESSED and previous_signature == analysis_signature
     if not use_cache and (S.OUTPUT_DIR / "tables" / "ls_period_search_summary.csv").exists():
         print("[cache reset] Inputs, settings or code changed; recomputing scientific results.")
     _files.write_run_config()
     import json
-    signature_path.write_text(json.dumps({"signature": run_signature}))
+    signature_path.write_text(json.dumps({"signature": analysis_signature}))
 
     summary_path = S.OUTPUT_DIR / "tables" / "ls_period_search_summary.csv"
     peaks_path = S.OUTPUT_DIR / "tables" / "ls_period_search_peaks.csv"
     summary_rows: list[dict[str, Any]] = []
     peak_rows_all: list[dict[str, Any]] = []
     if use_cache and summary_path.exists() and peaks_path.exists():
-        cached_summary = pd.read_csv(summary_path, dtype={"source_id": str}, low_memory=False)
-        cached_peaks = pd.read_csv(peaks_path, dtype={"source_id": str}, low_memory=False)
+        try:
+            cached_summary = pd.read_csv(summary_path, dtype={"source_id": str}, low_memory=False)
+            cached_peaks = pd.read_csv(peaks_path, dtype={"source_id": str}, low_memory=False)
+        except (OSError, ValueError, pd.errors.ParserError, pd.errors.EmptyDataError) as exc:
+            print(f'[cache repair] Unreadable aggregate period tables: {exc}; recovering source journals.')
+            cached_summary, cached_peaks = pd.DataFrame(), pd.DataFrame()
         missing_summary, missing_peaks = _files.cache_schema_missing(
             set(cached_summary.columns), set(cached_peaks.columns)
         )
@@ -214,6 +220,17 @@ def main() -> None:
             )
     elif use_cache and (summary_path.exists() or peaks_path.exists()):
         print("[cache reset] Only one cached result table exists; reprocessing to keep summary and peaks consistent.")
+    if use_cache:
+        summary_rows, peak_rows_all = _files.restore_source_checkpoints(analysis_signature, summary_rows, peak_rows_all)
+    # Freeze the alias-memory input for this analysis. Our own output must not
+    # be merged back into itself after an interrupted plotting pass.
+    base_path = S.OUTPUT_DIR / 'tables' / 'alias_memory_input.json'
+    baseline = R.read_json(base_path)
+    if baseline.get('signature') != analysis_signature or getattr(S, 'FORCE_RERUN', False):
+        explicit_memory = Path(S.ALIAS_MEMORY_CSV).resolve() != (S.OUTPUT_DIR / 'tables/field_alias_memory.csv').resolve()
+        base = _aliases.load_alias_memory() if explicit_memory else pd.DataFrame()
+        baseline = {'signature': analysis_signature, 'rows': base.to_dict('records')}
+        R.atomic_json(base_path, baseline)
     processed_keys = _files.build_processed_keys_from_rows(summary_rows)
     external_catalogue = _validation.load_external_catalogue()
 
@@ -251,6 +268,7 @@ def main() -> None:
         if S.SKIP_ALREADY_PROCESSED and expected_file_keys.issubset(processed_keys):
             print(f"[{file_index:,}/{len(files):,}] skip completed file: {path.name}")
             continue
+        summary_start, peaks_start = len(summary_rows), len(peak_rows_all)
         try:
             raw = pd.read_csv(path, dtype=str, low_memory=False)
             df = _loading.normalise_columns(raw)
@@ -292,6 +310,8 @@ def main() -> None:
             print(f"[{file_index:,}/{len(files):,}] FAILED {path.name}: {repr(exc)}")
             summary_rows.append({"file": path.name, "source_id": path.stem, "object_name": path.stem, "series": "", "status": "failed", "error": repr(exc), "traceback": traceback.format_exc(limit=8)})
 
+        _files.save_source_checkpoint(analysis_signature, path,
+                                      summary_rows[summary_start:], peak_rows_all[peaks_start:])
         completed += 1
         if completed % S.CHECKPOINT_EVERY_N_FILES == 0:
             # Save raw checkpoint before alias memory is recomputed. This is
@@ -306,7 +326,7 @@ def main() -> None:
     reference_df = _aliases.load_reference_summaries()
     learning_df = pd.concat([summary_df, reference_df], ignore_index=True, sort=False) if not reference_df.empty else summary_df
     current_inventory = _aliases.build_field_alias_inventory(learning_df, series=S.ALIAS_LEARNING_SERIES) if S.RUN_ALIAS_LEARNING else pd.DataFrame()
-    old_memory = _aliases.load_alias_memory()
+    old_memory = pd.DataFrame(baseline['rows'])
     memory_inventory = _aliases.merge_alias_inventories(old_memory, current_inventory) if S.UPDATE_ALIAS_MEMORY else _aliases.merge_alias_inventories(old_memory, current_inventory)
 
     # Apply alias memory, then recompute harmonic tests around the alias-aware
@@ -384,6 +404,10 @@ def main() -> None:
     _files.save_all_tables(summary_rows, peak_rows_all, current_inventory, memory_inventory, recommendations)
     if not any(row.get("status") == "ok" for row in summary_rows):
         raise RuntimeError("No usable period-search results. See ls_period_search_summary.csv for failures and skipped sources.")
+    if any(row.get('status') == 'failed' for row in summary_rows):
+        raise RuntimeError('Period-search sources failed; saved successful sources will be reused on restart.')
+    if not extra_fold_manifest.empty and extra_fold_manifest.status.eq('failed').any():
+        raise RuntimeError('Extra phase folds failed; restart to repair missing diagnostics.')
     plot_failures = [row for row in summary_rows if row.get("plot_error")]
     if plot_failures:
         raise RuntimeError(f"{len(plot_failures)} period plot(s) failed. Review plot_error in ls_period_search_summary.csv and rerun.")

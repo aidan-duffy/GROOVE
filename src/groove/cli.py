@@ -46,17 +46,17 @@ def cmd_stage(args):
     cfg = config.load(args.config)
     stage = args.command
     if stage == "run":
-        pipeline.run_all(cfg, skip_download=args.skip_download, skip_morphology=args.skip_morphology)
+        pipeline.run_all(cfg, skip_download=args.skip_download, skip_morphology=args.skip_morphology, rerun=args.rerun)
     elif stage == "download":
-        return pipeline.run_download(cfg, dry_run=args.dry_run, limit=args.limit)
+        return pipeline.run_download(cfg, dry_run=args.dry_run, limit=args.limit, rerun=args.rerun)
     elif stage == "clean":
-        pipeline.run_clean(cfg)
+        pipeline.run_clean(cfg, rerun=args.rerun)
     elif stage == "select":
-        pipeline.run_select(cfg)
+        pipeline.run_select(cfg, rerun=args.rerun)
     elif stage == "periods":
-        pipeline.run_periods(cfg)
+        pipeline.run_periods(cfg, rerun=args.rerun)
     elif stage == "morphology":
-        pipeline.run_morphology(cfg, extra_args=args.morphology_args)
+        pipeline.run_morphology(cfg, extra_args=args.morphology_args, rerun=args.rerun)
 
 
 def cmd_demo(args):
@@ -105,6 +105,8 @@ def build_parser() -> argparse.ArgumentParser:
     ):
         s = sub.add_parser(name, help=helptext)
         s.add_argument("--config", "-c", required=True)
+        s.add_argument("--rerun", action="store_true",
+                       help="recalculate this stage (or every requested stage for run), including plots")
         if name == "download":
             s.add_argument("--dry-run", action="store_true", help="list targets and estimate time; submit nothing")
             s.add_argument("--limit", type=int, help="only the first N targets (test run)")

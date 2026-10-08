@@ -5,7 +5,7 @@ type: software
 authors:
   - family-names: Duffy
     given-names: Aidan
-version: 1.0.4
+version: 1.0.9
 date-released: 2026-10-07
 license: MIT
 references:

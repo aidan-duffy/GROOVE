@@ -1,3 +1,24 @@
+# Changes in 1.0.9
+
+- Automatic, content-checked completion receipts for all CLI stages and full-pipeline resume.
+- Added --rerun to every stage and the full run command, including forced output regeneration.
+- Atomic cleaning-source checkpoints; unchanged selected files retain timestamps.
+- Atomic period-source journals before the full-table checkpoint, with retry of failed sources.
+- Separate scientific period-cache identity from visual settings; checked plot reuse and repair.
+- Freeze alias-memory inputs per analysis instead of merging a resumed run into its own output.
+- Retain fitted morphology science for output repair; add transform-output checkpoints and period-aware feature cache keys.
+- Validate downloaded CSV headers before reuse and reuse completed stage receipts without re-authenticating.
+- Report unsuccessful cleaning/period/morphology feature stages as incomplete instead of recording success.
+- Added interruption, complete-run repeat, damaged/missing output, forced rerun and parser regressions.
+
+# Changes in 1.0.8
+
+- Fixed field alias learning for the default O/C-only period search. Auto learning pools O/C peaks per star, preferring combined peaks when available, without counting a star twice.
+- Retained explicit single-band/combined learning for reproducible reference comparisons, and warn when the requested series is absent.
+- Preserve long source IDs as text in reference summaries.
+- Document fresh, contained period-stage retesting and original-reference comparison.
+- Raw LS/BLS computations and classification thresholds are unchanged by this release.
+
 # Changes in 1.0.4
 
 - Added a synthetic daily-contamination example whose strongest LS peak is near one day and whose rank-two 8.3-day stellar peak is automatically promoted using the existing alias rule.

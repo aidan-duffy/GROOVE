@@ -154,3 +154,14 @@ def test_simulated_download_reaches_final_scientific_outputs(download_config, mo
     assert ((periods.recommended_period_days / 12.7 - 1).abs() < .01).all()
     assert morphology.final_primary_tag.eq('wavelike').all()
     assert obj.submit_job.call_count == 2
+
+
+def test_download_receipt_skips_auth_when_complete_and_rerun_refetches(download_config, monkeypatch):
+    obj = fake_client(monkeypatch)
+    assert pipeline.run_download(download_config) == 0
+    submitted = obj.submit_job.call_count
+    obj.validate_authentication.reset_mock()
+    assert pipeline.run_download(download_config) == 0
+    obj.validate_authentication.assert_not_called()
+    assert pipeline.run_download(download_config, rerun=True) == 0
+    assert obj.submit_job.call_count > submitted

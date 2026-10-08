@@ -2,7 +2,7 @@
 # Run inside your existing GROOVE Git checkout using its active Python environment.
 set -euo pipefail
 if [ "$#" -ne 1 ]; then
-    echo 'Usage: bash update_from_zip.sh /absolute/path/to/GROOVE_v1.0.6.zip' >&2
+    echo 'Usage: bash update_from_zip.sh /absolute/path/to/GROOVE_v1.0.9.zip' >&2
     exit 2
 fi
 groove_zip=$(realpath "$1")
@@ -70,8 +70,8 @@ python -m pip install -e '.[dev]'
 python -m pip check
 groove_version=$(python -m groove --version)
 echo "$groove_version"
-if [ "$groove_version" != "groove 1.0.6" ]; then
-    echo "Expected GROOVE 1.0.6; stopping before commit/push." >&2
+if [ "$groove_version" != "groove 1.0.9" ]; then
+    echo "Expected GROOVE 1.0.9; stopping before commit/push." >&2
     exit 1
 fi
 python -m pytest -ra
@@ -79,8 +79,9 @@ python -m pytest -ra
 git add --pathspec-from-file="$groove_paths" --pathspec-file-nul
 if ! git diff --cached --quiet; then
     git diff --cached --stat
-    git commit -m 'Add dataset marker shapes, safe map redraws and user workflow documentation'
+    git commit -m 'Add pipeline and per-source resume with explicit reruns'
 fi
 git push origin "$groove_branch"
 echo 'GROOVE source updated, tested, committed and pushed.'
-echo 'Run a fresh demo/output folder to use O/C-only defaults. Existing YAML series overrides are preserved.'
+echo 'Repeat your normal command to resume. Use --rerun to deliberately recalculate.'
+echo 'Older outputs may need one rebuild to establish 1.0.9 checkpoints; see docs/restarts.md.'

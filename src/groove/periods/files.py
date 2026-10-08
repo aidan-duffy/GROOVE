@@ -60,7 +60,9 @@ def normal_plot_outputs_are_complete(
         outputs = expected_normal_plot_paths(row)
     except (TypeError, ValueError):
         return False
-    return bool(outputs) and all(output_file_is_complete(output) for output in outputs)
+    from .. import resume as R
+    return bool(outputs) and all(output_file_is_complete(output) and
+        (R.ACTIVE_PRODUCTS is None or R.ACTIVE_PRODUCTS.current(output)) for output in outputs)
 
 
 def output_file_is_complete(path: Path) -> bool:
@@ -81,6 +83,9 @@ def save_figure(fig, path: Path, **kwargs) -> None:
     """Publish a PNG only after its complete temporary file validates."""
     import os
     import tempfile
+    from .. import resume as R
+    if R.ACTIVE_PRODUCTS is not None and R.ACTIVE_PRODUCTS.current(path):
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, name = tempfile.mkstemp(prefix=path.stem + '_', suffix=path.suffix + '.tmp', dir=path.parent)
     os.close(descriptor)
@@ -90,6 +95,8 @@ def save_figure(fig, path: Path, **kwargs) -> None:
         if not output_file_is_complete(temporary):
             raise OSError(f'Plot did not validate: {path}')
         temporary.replace(path)
+        if R.ACTIVE_PRODUCTS is not None:
+            R.ACTIVE_PRODUCTS.record(path)
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -141,6 +148,7 @@ def completed_run_signature(files: list[Path]) -> str:
         "script_sha256": hashlib.sha256(b"".join(p.read_bytes() for p in sorted(script_path.parent.glob("*.py")))).hexdigest(),
         "config": current_run_config(),
         "inputs": input_state,
+        "external_inputs": external_input_state(),
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
@@ -260,7 +268,7 @@ def build_processed_keys_from_rows(summary_rows: list[dict[str, Any]]) -> set[tu
     return {
         (str(r.get("file", "")), str(r.get("series", "")))
         for r in summary_rows
-        if str(r.get("status", "")).lower() in {"ok", "skipped", "failed"}
+        if str(r.get("status", "")).lower() in {"ok", "skipped"}
     }
 
 
@@ -334,7 +342,59 @@ def save_all_tables(summary_rows: list[dict[str, Any]], peak_rows_all: list[dict
     safe_write_csv(recommendations if recommendations is not None else pd.DataFrame(), table_dir / "source_period_recommendations.csv")
     safe_write_csv(_recommend.source_consensus_table(summary_rows, recommendations), table_dir / "ls_source_consensus.csv")
     safe_write_csv(_validation.validation_summary_table(summary_rows, recommendations), table_dir / "ls_validation_summary.csv")
-    if current_inventory is not None and not current_inventory.empty:
-        safe_write_csv(current_inventory, table_dir / "field_alias_inventory_current.csv")
-    if memory_inventory is not None and not memory_inventory.empty:
-        safe_write_csv(memory_inventory, table_dir / "field_alias_memory.csv")
+    columns = ['ra_bin', 'dec_bin', 'field_key', 'field_bin_deg', 'alias_period_days',
+               'n_stars_in_field', 'n_stars_hit', 'hit_fraction', 'source', 'updated_utc']
+    for frame, name in [(current_inventory, 'field_alias_inventory_current.csv'),
+                        (memory_inventory, 'field_alias_memory.csv')]:
+        if frame is None or frame.empty:
+            frame = pd.DataFrame(columns=columns)
+        safe_write_csv(frame, table_dir / name)
+
+
+def analysis_run_signature(files: list[Path]) -> str:
+    """Scientific cache identity; visual/restart switches do not discard LS work."""
+    from .. import resume as R
+    config = {k: v for k, v in current_run_config().items()
+              if not any(token in k for token in ('PLOT', 'FIGURE', 'CHECKPOINT', 'PROGRESS', 'SKIP_', 'FORCE_RERUN', 'SAVE_PNG', 'SAVE_PDF', 'FORCED_FOLD_PERIOD_DAYS'))}
+    return R.hash_value({'code': R.code_hash('periods'), 'settings': config,
+                         'inputs': {str(p.resolve()): R.digest(p) for p in files},
+                         'external_inputs': external_input_state()})
+
+
+def save_source_checkpoint(signature, path, summary, peaks):
+    from .. import resume as R
+    journal = S.OUTPUT_DIR / 'tables' / 'source_checkpoints' / (R.hash_value(path.name) + '.json')
+    previous = R.read_json(journal)
+    if previous.get('signature') == signature:
+        summary = {(str(r.get('series'))): r for r in previous.get('summary', []) + summary}
+        peaks = {(str(r.get('series')), str(r.get('rank'))): r for r in previous.get('peaks', []) + peaks}
+        summary, peaks = list(summary.values()), list(peaks.values())
+    R.atomic_json(journal, {'signature': signature, 'summary': clean_for_csv(summary), 'peaks': clean_for_csv(peaks)})
+
+
+def restore_source_checkpoints(signature, summary, peaks):
+    from .. import resume as R
+    entries = [R.read_json(p) for p in (S.OUTPUT_DIR / 'tables' / 'source_checkpoints').glob('*.json')]
+    entries = [e for e in entries if e.get('signature') == signature]
+    rows = {(str(r.get('file')), str(r.get('series'))): r for r in summary if r.get('status') != 'failed'}
+    ranked = {(str(r.get('file')), str(r.get('series')), str(r.get('rank'))): r for r in peaks}
+    for entry in entries:
+        for row in entry.get('summary', []):
+            if row.get('status') != 'failed':
+                rows[(str(row.get('file')), str(row.get('series')))] = row
+        for row in entry.get('peaks', []):
+            ranked[(str(row.get('file')), str(row.get('series')), str(row.get('rank')))] = row
+    if entries:
+        print(f'[resume] recovered {len(entries):,} per-source period checkpoints')
+    return list(rows.values()), list(ranked.values())
+
+
+def external_input_state():
+    from .. import resume as R
+    paths = [Path(p) for p in S.REFERENCE_SUMMARY_CSVS]
+    if S.CATALOG_CSV:
+        paths.append(Path(S.CATALOG_CSV))
+    memory = Path(S.ALIAS_MEMORY_CSV)
+    if memory.resolve() != (S.OUTPUT_DIR / 'tables/field_alias_memory.csv').resolve():
+        paths.append(memory)
+    return {str(p.resolve()): R.digest(p) for p in paths}

@@ -20,6 +20,7 @@ from . import outputs as _outputs
 from . import persistence as _persistence
 from . import plots as _plots
 from . import utils as _utils
+from .. import resume as R
 
 
 
@@ -85,6 +86,8 @@ def finalise(table: pd.DataFrame, version_dir: Path, config: Mapping[str, Any],
         plot_sources, table, version_dir, output_config, logger,
         force=bool(config.get("force_replot_phase_products", False)))
     extra["missing_phase_fold_plots"] = missing_phase
+    if not missing_phase.empty and missing_phase.reason.astype(str).str.startswith('phase_plot_failed').any():
+        raise RuntimeError('Morphology phase plotting failed; restart to repair incomplete products.')
 
     _plots.build_neighbour_review_pages(
         neighbour_details, table, fold_paths, version_dir, logger)
@@ -121,6 +124,9 @@ def fit_or_refit(config: Dict[str, Any], args: argparse.Namespace, mode: str) ->
             "Use --mode transform to add data to it, --overwrite to rebuild it in place, "
             "or --model-version NAME to build a separate one." % version_dir)
     _persistence.ensure_structure(version_dir)
+    if config.get('force_recompute_features', False) and config.get('overwrite_existing_model', False):
+        # An old completion marker must not obstruct resuming a new forced fit.
+        (version_dir / 'models/model_metadata.json').unlink(missing_ok=True)
     logger = _utils.setup_logging(version_dir, args.verbose)
     logger.info("Mode=%s  version=%s", mode, version)
 
@@ -142,6 +148,17 @@ def fit_or_refit(config: Dict[str, Any], args: argparse.Namespace, mode: str) ->
 
     checkpoint = _persistence.load_finalisation_checkpoint(
         version_dir, records, config, mode, logger)
+    saved_table = version_dir / 'tables/all_sources.csv'
+    if checkpoint is not None and saved_table.is_file():
+        saved_keys = set(_loading.read_table(saved_table).source_key.astype(str))
+        record_keys = {str(r['summary']['source_key']) for r in records}
+        if saved_keys - record_keys and not config.get('overwrite_existing_model', False):
+            raise RuntimeError('This reference now contains additional transformed sources. '
+                               'Use map-only/plot-only for output repair; --rerun deliberately rebuilds the fit.')
+    if (checkpoint is None and (version_dir / 'models/model_metadata.json').exists()
+            and not bool(config.get('overwrite_existing_model', False))):
+        raise RuntimeError('Saved morphology science is incompatible with these inputs/settings. '
+                           'Use --rerun to rebuild, or select a new model version.')
     if checkpoint is not None:
         table = checkpoint["table"]
         metadata = dict(checkpoint["metadata"])
@@ -158,7 +175,7 @@ def fit_or_refit(config: Dict[str, Any], args: argparse.Namespace, mode: str) ->
         _utils.atomic_write_json(metadata, version_dir / "models" / "model_metadata.json")
         _utils.atomic_write_json(config, version_dir / "models" / "resolved_config.json")
         _persistence.update_current_pointer(output_root, version, version_dir)
-        _persistence.clear_finalisation_checkpoint(version_dir)
+        # Retain the scientific checkpoint for interrupted/missing output repair.
         if bool(config.get("clean_full_feature_cache_after_success", True)):
             _persistence.clean_full_feature_cache(version_dir, logger)
         logger.info("Done after resumed finalisation. Outputs under %s", version_dir)
@@ -276,6 +293,7 @@ def fit_or_refit(config: Dict[str, Any], args: argparse.Namespace, mode: str) ->
     if bool(config.get("resume_finalisation", True)):
         _persistence.save_finalisation_checkpoint(version_dir, {
             "schema": S.FEATURE_SCHEMA_VERSION,
+            "science_config_hash": _persistence.science_config_hash(config),
             "feature_config_hash": _features.feature_config_hash(config),
             "mode": mode,
             "source_key_digest": _persistence.source_key_digest(records),
@@ -294,7 +312,7 @@ def fit_or_refit(config: Dict[str, Any], args: argparse.Namespace, mode: str) ->
     _utils.atomic_write_json(metadata, version_dir / "models" / "model_metadata.json")
     _utils.atomic_write_json(config, version_dir / "models" / "resolved_config.json")
     _persistence.update_current_pointer(output_root, version, version_dir)
-    _persistence.clear_finalisation_checkpoint(version_dir)
+    # Retain the scientific checkpoint for interrupted/missing output repair.
     if bool(config.get("clean_full_feature_cache_after_success", True)):
         _persistence.clean_full_feature_cache(version_dir, logger)
     logger.info("Done. Outputs under %s", version_dir)
@@ -326,6 +344,21 @@ def transform_mode(config: Dict[str, Any], args: argparse.Namespace) -> Dict[str
     _outputs.mark_sources_with_existing_plots(sources, specs, logger)
     periods, conflicts = _loading.read_period_tables(specs, config, logger)
 
+    request = R.hash_value({'sources': {k: s.get('file_fingerprint') for k, s in sources.items()},
+        'periods': periods, 'science': _persistence.science_config_hash(config),
+        'manual': _persistence.manual_labels_fingerprint(config), 'batch': config.get('batch_id')})
+    transform_checkpoint = version_dir / 'cache' / ('transform_' + request + '.joblib')
+    if transform_checkpoint.is_file() and not config.get('force_recompute_features', False):
+        try:
+            saved = joblib.load(transform_checkpoint)
+        except Exception:
+            saved = None
+        if saved is not None:
+            logger.info('Resuming saved transform output products')
+            finalise(saved['table'], version_dir, config, specs, saved['records'], saved['extra'],
+                     saved['outline'], logger, saved['space'], saved['keys'], sources)
+            return {'version_dir': str(version_dir), 'n_sources': len(saved['table'])}
+
     old = _loading.read_table(version_dir / "tables" / "all_sources.csv")
     known = set(old["source_key"].astype(str)) if not old.empty else set()
     policy = str(config.get("existing_id_policy", "skip"))
@@ -336,7 +369,11 @@ def transform_mode(config: Dict[str, Any], args: argparse.Namespace) -> Dict[str
     else:
         new_keys = list(sources.keys())
     if not new_keys:
-        logger.info("Nothing to transform.")
+        logger.info('No new sources; repairing/reusing saved catalogue output products.')
+        validation_keys, validation_space = _persistence.load_combined_validation_space(version_dir)
+        finalise(old, version_dir, config, specs, [], {},
+                 bool(config.get('outline_new_sources', True)), logger,
+                 validation_space, validation_keys, sources)
         return {"version_dir": str(version_dir), "n_sources": 0}
 
     subset = {k: sources[k] for k in new_keys}
@@ -395,10 +432,16 @@ def transform_mode(config: Dict[str, Any], args: argparse.Namespace) -> Dict[str
     outline = True if outline is None else bool(outline)
     if args.no_outline_new:
         outline = False
+    payload = {'table': combined, 'records': records,
+               'extra': {'processing_failures': failures, 'load_problems': load_problems,
+                         'period_table_conflicts': conflicts},
+               'outline': outline, 'space': validation_space, 'keys': validation_keys}
+    transform_checkpoint.parent.mkdir(parents=True, exist_ok=True)
+    temporary = transform_checkpoint.with_suffix('.tmp')
+    joblib.dump(payload, temporary, compress=3)
+    temporary.replace(transform_checkpoint)
     finalise(combined, version_dir, config, specs, records,
-             {"processing_failures": failures, "load_problems": load_problems,
-              "period_table_conflicts": conflicts}, outline, logger,
-             validation_space, validation_keys, subset)
+             payload['extra'], outline, logger, validation_space, validation_keys, subset)
     logger.info("Transformed %d new sources into %s", len(table), version_dir)
     return {"version_dir": str(version_dir), "n_sources": len(table)}
 

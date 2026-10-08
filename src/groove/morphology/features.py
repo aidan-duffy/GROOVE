@@ -1330,7 +1330,7 @@ def extract_all_features(sources: Mapping[str, Mapping[str, Any]],
     jobs = []
     for key in keys:
         source = sources[key]
-        path = cache_path(version_dir, key, cache_key + str(source.get("file_fingerprint", "")))
+        path = cache_path(version_dir, key, cache_key + _utils.hash_json([str(source.get("file_fingerprint", "")), periods.get(key)]))
         jobs.append((source, periods.get(key), path))
 
     if n_jobs == 1 or len(keys) < 8:
@@ -1345,4 +1345,7 @@ def extract_all_features(sources: Mapping[str, Mapping[str, Any]],
     failures = [f for _, f in results if f is not None]
     if failures:
         logger.warning("%d sources failed feature extraction", len(failures))
+        _utils.atomic_write_csv(pd.DataFrame(failures), Path(version_dir) / 'tables/processing_failures.csv')
+        raise RuntimeError(f'{len(failures)} morphology sources failed feature extraction; '
+                           'successful feature caches are saved. Review processing_failures.csv and resume.')
     return records, pd.DataFrame(failures)

@@ -22,6 +22,7 @@ shape and does not establish a planetary interpretation.
 
 - [Download ATLAS targets](#analyse-your-targets)
 - [Use your existing data and skip stages](docs/data_workflows.md#existing-raw-atlas-photometry-skip-downloading)
+- [Restart interrupted runs or deliberately recalculate](docs/restarts.md)
 - [Run each stage separately](docs/data_workflows.md#run-stage-by-stage)
 - [Resume from cleaned/selected data](docs/data_workflows.md#resume-at-a-later-stage)
 - [Add a second sample to the same map](#add-targets-to-an-existing-map)
@@ -29,8 +30,28 @@ shape and does not establish a planetary interpretation.
 - [Configuration options and defaults](docs/configuration.md)
 - [What other surveys would require](docs/data_workflows.md#other-surveys-adaptation-not-currently-validated-support)
 
-Version 1.0.6 keeps O/C-only period searches and three default overview maps.
+Version 1.0.9 keeps O/C-only period searches and three default overview maps.
+Field alias learning now works without a combined-band search. See the
+[alias-learning fix](docs/release_1_0_8.md).
 Dataset shapes are optional. Saved maps can be redrawn without refitting.
+
+## Restart or recalculate
+
+Resume is automatic: rerun the same command with the same configuration and
+output folder. Completed stages are checked and skipped; interrupted stages
+reuse compatible source and plot checkpoints.
+
+```bash
+groove run -c run.yaml --skip-download           # resume existing photometry workflow
+groove periods -c run.yaml                      # resume just the period stage
+groove run -c run.yaml --skip-download --rerun   # deliberately recalculate all analysis stages
+groove morphology --rerun -c run.yaml           # recalculate morphology and its outputs
+```
+
+Keep `--skip-download` when using existing raw data. A full `--rerun` without it
+also requests fresh downloads. If a forced rerun is interrupted, omit `--rerun`
+on the next invocation to resume the newly saved work. See
+[restart details and limitations](docs/restarts.md).
 
 ## Install
 
@@ -234,8 +255,8 @@ groove morphology -c configs/new_batch.yaml -- --mode map-only
 ```
 
 This redraws saved maps without recomputing scientific results. In the interactive
-map, click several stars (or use lasso/box selection) to compare phase images side
-by side below it. Remove individual previews or clear the selection. See
+map, click several stars (or use lasso/box selection) to compare phase images in fixed-width cards that wrap into rows below it. Drag or scroll to zoom
+the map; double-click to reset. Remove individual previews or clear the selection. See
 [map controls](docs/map_controls.md) for shapes, legends and single-star highlighting.
 
 ## Settings and scientific interpretation

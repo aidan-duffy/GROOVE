@@ -124,3 +124,14 @@ def add_target_metadata(df: pd.DataFrame, row: Dict[str, Any]) -> pd.DataFrame:
         else:
             output.insert(position, name, value)
     return output
+
+
+def valid_download_file(path: Path) -> bool:
+    """Reject truncated/non-photometry files before declaring a resumed target done."""
+    if not path.is_file() or path.stat().st_size == 0:
+        return False
+    try:
+        frame = pd.read_csv(path, nrows=1)
+        return not frame.empty and {'MJD', 'F'}.issubset(frame.columns)
+    except (OSError, ValueError, pd.errors.ParserError, pd.errors.EmptyDataError):
+        return False

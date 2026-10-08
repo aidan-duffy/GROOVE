@@ -154,7 +154,7 @@ def download(args, frame, directory, token):
                 raise RuntimeError("A previous submission has an unknown outcome. Check your ATLAS queue; set its task_url in download_progress.csv to resume, or status=pending after confirming no job exists.")
             active = bool(row.get("task_url") or row.get("result_url")) and status not in ("completed", "no_data")
             if not active and not args.force_redownload:
-                if path.is_file() and path.stat().st_size > 0:
+                if storage.valid_download_file(path):
                     save(row, status="completed", error_message="")
                     print_safe(f"[{index}/{len(keys)}] {label}: existing file kept")
                     continue

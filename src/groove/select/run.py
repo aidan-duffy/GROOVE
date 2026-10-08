@@ -9,10 +9,13 @@ import pandas as pd
 
 from . import settings as S
 from . import criteria
+from .. import resume as R
 
 
 def place(src: Path, dst: Path) -> None:
     if dst.exists():
+        if not getattr(S, 'FORCE_RERUN', False) and R.digest(src) == R.digest(dst):
+            return
         dst.unlink()
     if S.LINK_INSTEAD_OF_COPY:
         try:
@@ -33,8 +36,10 @@ def main() -> pd.DataFrame:
     table = criteria.evaluate(summary)
 
     selected_dir.mkdir(parents=True, exist_ok=True)
+    desired = set(table.loc[table['selected'], 'cleaned_file'].astype(str))
     for old in selected_dir.glob("*_cleaned.csv"):
-        old.unlink()
+        if old.name not in desired:
+            old.unlink()
     n_placed = 0
     for _, row in table[table["selected"]].iterrows():
         src = Path(str(row.get("cleaned_path", "")))

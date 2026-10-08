@@ -190,6 +190,8 @@ select:                             # source-level usability cuts
   max_removed_fraction: 0.5
   max_median_uncertainty_mag: 0.2
 periods:
+  # Field alias learning uses O/C unless combined reference/results are available.
+  alias_learning_series: auto
   series_to_run: [o, c]             # add combined to compute combined photometry
   plot_series: [o, c]               # add combined to also save its plots
   min_period_days: 0.5

@@ -40,7 +40,7 @@ CATALOG_PERIOD_COLUMN = "period_days"
 # light-curve file is skipped before pd.read_csv, so interrupted large runs
 # continue at the first unfinished file instead of loading earlier files again.
 SKIP_ALREADY_PROCESSED = True
-CHECKPOINT_EVERY_N_FILES = 500
+CHECKPOINT_EVERY_N_FILES = 500  # Full-table snapshots; each source also has an atomic journal.
 MAX_FILES: int | None = None
 SERIES_TO_RUN = ["o", "c"]
 # Independent saving selection; combined is opt-in for both analysis and plots.
@@ -82,7 +82,10 @@ BLS_SAMPLES_PER_PEAK = 15
 RUN_ALIAS_LEARNING = True
 UPDATE_ALIAS_MEMORY = True
 ALIAS_MEMORY_CSV = OUTPUT_DIR / "tables" / "field_alias_memory.csv"
-ALIAS_LEARNING_SERIES = "combined"
+# Auto prefers each star's combined reference/results when available; otherwise
+# pools its O/C peaks, counting that star once. No combined search is required.
+# Set o, c or combined explicitly to reproduce a single-series inventory.
+ALIAS_LEARNING_SERIES = "auto"
 
 FIELD_BIN_DEG = 5.0
 FIELD_MIN_STARS = 8
@@ -163,7 +166,7 @@ MAKE_PLOTS_AFTER_FINAL = True
 # Resume an interrupted second plotting pass by reusing normal plots only when
 # every file expected for that series already exists and is non-empty. Set this
 # to False when plot styling/settings have changed and every plot must be redrawn.
-SKIP_ALREADY_PLOTTED = False
+SKIP_ALREADY_PLOTTED = True
 PLOT_PERIOD_AXIS_LOG = True
 PLOT_CATALOGUE_PERIOD_IN_LEGEND = True
 PLOT_DPI = 250

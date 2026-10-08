@@ -6,6 +6,7 @@ from . import settings as S
 from . import cuts as _cuts
 from . import loading as _loading
 from . import plots as _plots
+from .. import resume as R
 
 
 
@@ -92,12 +93,30 @@ def main() -> None:
     print(f"Dip rescue:     {S.RESCUE_ENABLE}")
     print("=" * 90)
 
+    scientific = {k: v for k, v in R.settings_dict(S).items()
+                  if not any(token in k for token in ('PLOT', 'SAVE_', 'EXAMPLE', 'PROGRESS', 'FORCE', 'OVERWRITE'))}
+    clean_signature = R.hash_value({'code': R.code_hash('clean'), 'settings': scientific})
+    checkpoint_dir = S.CLEANED_DIR / '.checkpoints'
     rows: list[dict] = []
     all_reason_counts: dict[str, int] = {}
 
     for file_number, input_file in enumerate(files, start=1):
         stem = input_file.stem
         cleaned_file = S.CLEANED_DIR / f"{stem}_cleaned.csv"
+
+        checkpoint = checkpoint_dir / (R.hash_value(input_file.name) + '.json')
+        signature = R.hash_value([clean_signature, R.digest(input_file)])
+        saved = R.read_json(checkpoint)
+        if (not getattr(S, 'FORCE_RERUN', False) and saved.get('signature') == signature
+                and saved.get('row', {}).get('status') == 'ok'
+                and saved.get('output_hash') == R.digest(cleaned_file)):
+            row = saved['row']
+            rows.append(row)
+            for token, count in json.loads(row['reason_token_counts_json']).items():
+                all_reason_counts[token] = all_reason_counts.get(token, 0) + int(count)
+            if file_number % max(1, S.PROGRESS_EVERY) == 0 or file_number == len(files):
+                print(f'[{file_number:,}/{len(files):,}] reused cleaned source')
+            continue
 
         try:
             raw = pd.read_csv(input_file, dtype=str)
@@ -114,11 +133,10 @@ def main() -> None:
             ) = _loading.get_metadata_from_df(all_rows, stem)
 
             clean = all_rows.loc[all_rows["final_keep"]].copy()
-            if S.OVERWRITE_CLEANED_FILES or not cleaned_file.exists():
-                clean.to_csv(cleaned_file, index=False)
-                file_action = "written"
-            else:
-                file_action = "existing_kept"
+            temporary = cleaned_file.with_suffix('.csv.tmp')
+            clean.to_csv(temporary, index=False)
+            temporary.replace(cleaned_file)
+            file_action = 'written'
 
             rejected_reasons = all_rows.loc[
                 ~all_rows["final_keep"],
@@ -193,6 +211,8 @@ def main() -> None:
                 "cleaned_path": str(cleaned_file),
             }
             rows.append(row)
+            R.atomic_json(checkpoint, {'signature': signature, 'row': row,
+                                      'output_hash': R.digest(cleaned_file)})
 
         except Exception as error:
             object_name, ra, dec = _loading.parse_name_ra_dec_from_filename(stem)
@@ -254,7 +274,9 @@ def main() -> None:
 
     summary_df = pd.DataFrame(rows)
     summary_path = S.CLEANED_DIR / "cleaning_summary.csv"
-    summary_df.to_csv(summary_path, index=False)
+    temporary = summary_path.with_suffix('.csv.tmp')
+    summary_df.to_csv(temporary, index=False)
+    temporary.replace(summary_path)
 
     reason_df = pd.DataFrame(
         [
@@ -303,3 +325,6 @@ def main() -> None:
     if len(failed):
         print("Check the 'error' column in the summary CSV for failed files.")
     print("=" * 90)
+
+    if len(failed):
+        raise RuntimeError(f'{len(failed)} cleaning source(s) failed; fix inputs and resume to retry.')

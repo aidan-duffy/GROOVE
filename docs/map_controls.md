@@ -43,11 +43,19 @@ reopen the newly generated HTML. Running transform again skips existing sources
 and is not the way to update plot styling. `plot-only` is a different mode: it
 rebuilds phase/source/category plots, not the overview maps.
 
+## Zoom and navigate
+
+Drag a rectangle or use the mouse wheel over the map to zoom. The always-visible
+toolbar also offers zoom in/out, pan, reset, and lasso/box selection. Double-click
+to reset the axes. Zoom only changes the view; it never changes UMAP coordinates
+or classifications. Switch back to zoom in the toolbar after using selection.
+
 ## Compare several sources
 
 In an interactive HTML map, click multiple points to keep their phase-plot
-previews below the map. They appear side by side where the window is wide
-enough. Repeated clicks do not duplicate a source. Use the lasso or box selection
+previews below the map. Cards are capped at 420 pixels wide, with a 320-pixel image area; they
+wrap into additional rows and shrink to fit narrow screens. A single selection
+does not expand across the page. Repeated clicks do not duplicate a source. Use the lasso or box selection
 tool to add several points at once. Each preview has a Remove button; Clear
 selection empties the panel. Click a preview image to open the full-size PNG.
 Selection is local to that browser page and does not change your data or labels.

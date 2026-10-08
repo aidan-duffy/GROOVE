@@ -81,15 +81,43 @@ def _cluster_periods_across_stars(star_periods: list[list[float]], n_stars: int)
     return clusters
 
 
-def build_field_alias_inventory(summary: pd.DataFrame, series: str = S.ALIAS_LEARNING_SERIES) -> pd.DataFrame:
+def build_field_alias_inventory(summary: pd.DataFrame, series: str | None = None) -> pd.DataFrame:
+    """Learn per field, counting unique stars rather than filter measurements.
+
+    Auto uses a star's combined peaks when available (including references),
+    otherwise pools its O/C peaks. A star can hit a cluster only once.
+    Explicit o/c/combined retains the original single-series algorithm.
+    """
+    series = S.ALIAS_LEARNING_SERIES if series is None else series
+    if series not in {"auto", "o", "c", "combined"}:
+        raise ValueError("alias_learning_series must be auto, o, c or combined")
     needed = {"series", "source_id", "ra_deg", "dec_deg", "ls_top_periods_days"}
     if summary.empty or not needed.issubset(summary.columns):
         return pd.DataFrame()
-    work = summary.loc[summary["series"].astype(str).eq(series)].copy()
-    work = work.drop_duplicates("source_id")
+    bands = ["o", "c", "combined"] if series == "auto" else [series]
+    work = summary.loc[summary["series"].astype(str).isin(bands)].copy()
+    work = work.dropna(subset=["source_id"])
+    # Current-run rows precede reference rows: retain current measurements when
+    # the same source and band appears in both, without counting it twice.
+    work = work.drop_duplicates(["source_id", "series"])
     work = work.dropna(subset=["ra_deg", "dec_deg"])
     if work.empty:
+        if series != "auto":
+            print(f"  [warning] No {series} rows available for field alias learning; "
+                  "use alias_learning_series: auto for O/C-only runs.")
         return pd.DataFrame()
+
+    stars: list[dict[str, Any]] = []
+    for source_id, group in work.groupby("source_id", sort=False):
+        combined = group.loc[group["series"].eq("combined")]
+        chosen = combined if series == "auto" and not combined.empty else group
+        metadata = chosen.iloc[0]
+        peaks = []
+        for value in chosen["ls_top_periods_days"]:
+            peaks.extend(_loading.parse_float_list(value)[:S.MAX_PEAKS_FOR_FIELD_LEARNING])
+        stars.append({"source_id": source_id, "ra_deg": metadata["ra_deg"],
+                      "dec_deg": metadata["dec_deg"], "learning_peaks": peaks})
+    work = pd.DataFrame(stars)
 
     work["ra_bin"] = np.floor(work["ra_deg"].astype(float) / S.FIELD_BIN_DEG).astype(int)
     work["dec_bin"] = np.floor(work["dec_deg"].astype(float) / S.FIELD_BIN_DEG).astype(int)
@@ -101,7 +129,7 @@ def build_field_alias_inventory(summary: pd.DataFrame, series: str = S.ALIAS_LEA
             continue
         star_periods: list[list[float]] = []
         for _, row in group.iterrows():
-            peaks = _loading.parse_float_list(row.get("ls_top_periods_days"))[:S.MAX_PEAKS_FOR_FIELD_LEARNING]
+            peaks = row["learning_peaks"]
             # Universal aliases are already universal; field inventory focuses on
             # additional local pile-ups. Keep non-universal only.
             peaks = [p for p in peaks if p > 0 and not universal_alias_match(p)]
@@ -132,7 +160,7 @@ def load_reference_summaries() -> pd.DataFrame:
         try:
             p = Path(path)
             if p.exists():
-                frames.append(pd.read_csv(p, low_memory=False))
+                frames.append(pd.read_csv(p, dtype={"source_id": str}, low_memory=False))
         except Exception as exc:
             print(f"  [warning] Could not read reference summary {path}: {exc}")
     return pd.concat(frames, ignore_index=True, sort=False) if frames else pd.DataFrame()

@@ -437,7 +437,7 @@ def write_tables(table: pd.DataFrame, version_dir: Path, extra: Mapping[str, pd.
         _utils.atomic_write_csv(frame, tables / ("%s.csv" % name))
     for name, frame in extra.items():
         if frame is not None and (len(frame) or name in {
-                "missing_period_plots", "flare_event_validation"}):
+                "missing_period_plots", "flare_event_validation", "processing_failures"}):
             _utils.atomic_write_csv(frame, tables / ("%s.csv" % name))
     memberships = extra.get("category_memberships")
     if isinstance(memberships, pd.DataFrame):

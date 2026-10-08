@@ -143,6 +143,7 @@ def load_finalisation_checkpoint(version_dir: Path, records: Sequence[Mapping[st
         return None
     expected = {
         "schema": S.FEATURE_SCHEMA_VERSION,
+        "science_config_hash": science_config_hash(config),
         "feature_config_hash": _features.feature_config_hash(config),
         "mode": mode,
         "source_key_digest": source_key_digest(records),
@@ -213,3 +214,14 @@ def resolve_version_dir(output_root: Path, requested: Optional[str]) -> Tuple[st
 def update_current_pointer(output_root: Path, version: str, version_dir: Path) -> None:
     _utils.atomic_write_json({"model_version": version, "model_directory": str(version_dir),
                        "updated": _utils.iso_now()}, Path(output_root) / "current_model.json")
+
+
+def science_config_hash(config):
+    """Fitted embeddings/rules invalidate independently of display choices."""
+    from .. import resume as R
+    ignored = {'output_root', 'datasets', 'mode', 'model_version', 'batch_id',
+        'maps_to_plot', 'dataset_markers', 'outline_new_sources', 'n_jobs',
+        'force_recompute_features', 'overwrite_existing_model', 'resume_finalisation',
+        'force_replot_phase_products', 'existing_id_policy', 'clean_full_feature_cache_after_success'}
+    return R.hash_value({k: v for k, v in config.items() if k not in ignored
+                        and not k.startswith(('_', 'make_', 'review_plot_', 'appendix_'))})

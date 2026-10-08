@@ -11,6 +11,7 @@ from matplotlib.lines import Line2D
 import numpy as np
 import pandas as pd
 from . import settings as S
+from .. import resume as R
 from . import classify as _classify
 from . import embedding as _embedding
 from . import features as _features
@@ -524,7 +525,7 @@ def make_interactive_map(table: pd.DataFrame, x_col: str, y_col: str, title: str
                 customdata=point_details, name=str(label), marker={'size': 18, 'symbol': 'star', 'color': '#FFD54F',
                                          'line': {'color': 'black', 'width': 1.5}}, hoverinfo='skip'))
     chart.update_layout(title=title, xaxis_title='UMAP 1', yaxis_title='UMAP 2',
-                        template='plotly_white', height=750, legend={'groupclick': 'togglegroup'},
+                        template='plotly_white', height=750, dragmode='zoom', legend={'groupclick': 'togglegroup'},
                         margin={'l': 60, 'r': 30, 't': 90, 'b': 50})
     script = """
 const graph = document.getElementById('{plot_id}');
@@ -534,7 +535,7 @@ panel.style.cssText = 'font:15px sans-serif;margin:20px';
 const heading = document.createElement('h2');
 heading.textContent = 'Compare selected light curves';
 const help = document.createElement('p');
-help.textContent = 'Click points to add previews below, or select several with the lasso/box tool. Click an image to open it at full size.';
+help.textContent = 'Drag on the map or use the mouse wheel to zoom; double-click to reset. Use the toolbar to pan or select several points. Click points to add previews below; click a preview to open it at full size.';
 const clear = document.createElement('button');
 clear.textContent = 'Clear selection';
 clear.disabled = true;
@@ -542,7 +543,7 @@ const status = document.createElement('span');
 status.style.marginLeft = '12px';
 status.setAttribute('aria-live', 'polite');
 const board = document.createElement('div');
-board.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px;margin-top:16px';
+board.style.cssText = 'display:flex;flex-wrap:wrap;align-items:flex-start;gap:16px;margin-top:16px';
 const selected = new Map();
 function updateCount() {
     status.textContent = selected.size + ' selected';
@@ -559,7 +560,7 @@ function addPreview(detail) {
     if (selected.has(key)) return;
     const card = document.createElement('article');
     card.className = 'groove-preview-card';
-    card.style.cssText = 'border:1px solid #aaa;border-radius:6px;padding:12px;min-width:0;background:white';
+    card.style.cssText = 'box-sizing:border-box;width:420px;max-width:100%;flex:0 0 auto;border:1px solid #aaa;border-radius:6px;padding:12px;min-width:0;background:white;overflow-wrap:anywhere';
     const caption = document.createElement('p');
     caption.textContent = 'Source ' + detail[0] + ' | ' + detail[1] + ' | ' + detail[2] + ' | P = ' + detail[3] + ' d';
     const remove = document.createElement('button');
@@ -574,7 +575,7 @@ function addPreview(detail) {
         link.href = detail[5]; link.target = '_blank'; link.rel = 'noopener';
         const picture = document.createElement('img');
         picture.src = detail[5]; picture.alt = 'Phase plot for ' + detail[0];
-        picture.style.cssText = 'display:block;width:100%;height:auto;margin-top:8px';
+        picture.style.cssText = 'display:block;width:100%;height:320px;object-fit:contain;margin-top:8px';
         picture.addEventListener('error', function() {
             picture.style.display = 'none';
             const missing = document.createElement('p');
@@ -599,9 +600,16 @@ updateCount();
 """
     output = maps / (base_name + '_interactive.html')
     temporary = output.with_suffix('.html.tmp')
+    if R.ACTIVE_PRODUCTS is not None and R.ACTIVE_PRODUCTS.current(output):
+        return
     try:
-        chart.write_html(str(temporary), include_plotlyjs=True, full_html=True, post_script=script)
+        chart.write_html(str(temporary), include_plotlyjs=True, full_html=True, post_script=script,
+                         config={'scrollZoom': True, 'responsive': True,
+                                 'displayModeBar': True, 'displaylogo': False,
+                                 'doubleClick': 'reset'})
         temporary.replace(output)
+        if R.ACTIVE_PRODUCTS is not None:
+            R.ACTIVE_PRODUCTS.record(output)
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -634,7 +642,7 @@ def build_category_appendix(table: pd.DataFrame, fold_paths: Mapping[str, Path],
                           for _, row in chunk.iterrows()]
                 inputs = [Path(path) for path in inputs
                           if path is not None and Path(path).exists()]
-                if inputs and destination.stat().st_mtime_ns >= max(
+                if (R.ACTIVE_PRODUCTS is None or R.ACTIVE_PRODUCTS.current(destination)) and inputs and destination.stat().st_mtime_ns >= max(
                         path.stat().st_mtime_ns for path in inputs):
                     skipped += 1
                     continue
@@ -725,7 +733,9 @@ def _phase_fold_plot_worker(source: Mapping[str, Any], row: Mapping[str, Any],
     """Write a phase fold from the accepted filters without reclassification."""
     output = Path(output_path)
     key = str(row.get("source_key", ""))
-    if output.exists() and output.stat().st_size > 0 and not force:
+    cache = R.ProductStore(output.parent / '.receipts', R.hash_value([
+        source.get('file_fingerprint'), row.get('recommended_period_days'), dpi]), force)
+    if cache.current(output):
         return key, str(output), None
     data = source.get("data")
     if not isinstance(data, pd.DataFrame) or data.empty:
@@ -741,6 +751,7 @@ def _phase_fold_plot_worker(source: Mapping[str, Any], row: Mapping[str, Any],
     try:
         create_fold_plot(record, row, temporary, dpi=dpi)
         temporary.replace(output)
+        cache.record(output)
     except Exception as error:
         if temporary.exists():
             try:
@@ -771,9 +782,20 @@ def generate_phase_fold_products(sources: Mapping[str, Mapping[str, Any]],
         # A completed source image is the per-source checkpoint.  Resolve it
         # before requiring raw data so interrupted and transform runs only
         # generate genuinely missing phase folds.
-        if output.exists() and output.stat().st_size > 0 and not force:
+        source = sources.get(key) or by_source_id.get(source_id)
+        cache = R.ProductStore(output.parent / '.receipts', R.hash_value([
+            (source or {}).get('file_fingerprint'), row.get('recommended_period_days'),
+            int(config.get('review_plot_dpi', 110))]), force)
+        if cache.current(output):
             resolved[key] = output
             continue
+        # Existing sources carried into a transform may have no raw data here;
+        # validate the bytes against their original receipt before reusing them.
+        if source is None and not force:
+            saved = R.read_json(cache.receipt(output))
+            if saved.get('sha256') and saved['sha256'] == R.digest(output):
+                resolved[key] = output
+                continue
         source = sources.get(key) or by_source_id.get(source_id)
         if source is None:
             missing.append({"source_id": source_id, "source_key": key,

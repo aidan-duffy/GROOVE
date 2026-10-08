@@ -28,6 +28,8 @@ one section each; duplicate YAML sections can silently replace earlier settings.
 | select.max_median_uncertainty_mag | 0.2 |
 | periods.series_to_run | [o, c]; add combined to analyse combined photometry |
 | periods.plot_series | [o, c]; selects saved series, including alias/harmonic extras |
+| periods.alias_learning_series | auto; use each star's combined peaks if available, otherwise pool O/C peaks, counting the star once |
+| periods.reference_summary_csvs | []; optional existing full-sample period summaries for field alias learning |
 | periods.plot_mode | all or none |
 | periods.extra_fold_series_mode | recommended or all; automatic suspects can also get diagnostics, within plot_series |
 | morphology.mode | fit, transform, refit, classify, relabel, plot-only, map-only, highlight-source, umap-families |
@@ -59,3 +61,10 @@ Scientific cut and rule thresholds require sample-specific validation.
 [Stage details](stages.md), [morphology details](morphology_details.md),
 [plot selection](release_1_0_5.md), [map controls](map_controls.md), and
 [data workflows](data_workflows.md) explain effects and worked examples.
+
+## Restart controls
+
+Resume is automatic for the full pipeline and individual stages. `--rerun`
+forces recalculation for the requested command; it is a CLI flag, not a YAML
+key. Source journals supplement the period full-table checkpoint interval.
+See [restart behaviour](restarts.md) for scope, plotting and migration details.

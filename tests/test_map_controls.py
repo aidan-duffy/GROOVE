@@ -32,6 +32,10 @@ def test_interactive_dataset_shapes_and_comparison_controls(tmp_path):
     assert 'Dataset: demo' in html and 'Dataset: reference' in html
     assert 'plotly_selected' in html and 'Compare selected light curves' in html
     assert 'selected.has(key)' in html and 'Clear selection' in html
+    assert 'width:420px;max-width:100%' in html
+    assert 'height:320px;object-fit:contain' in html
+    assert 'flex-wrap:wrap' in html
+    assert '"scrollZoom": true' in html and '"displayModeBar": true' in html
 
 
 def test_map_only_preserves_catalogue_and_models(tmp_path, monkeypatch):

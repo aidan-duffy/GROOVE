@@ -1,4 +1,4 @@
-# GROOVE 1.0.6: Linux / WSL end-to-end validation
+# GROOVE 1.0.7: Linux / WSL end-to-end validation
 
 These commands are Bash, for your existing clone at
 `/mnt/c/Users/aidan/TFM/GROOVE`. Use a fresh output folder for each demo.
@@ -14,7 +14,7 @@ conda activate groove-test
 cd /mnt/c/Users/aidan/TFM/GROOVE
 ```
 
-If GitHub already contains 1.0.6 and you have no conflicting local edits:
+If GitHub already contains 1.0.7 and you have no conflicting local edits:
 
 ```bash
 git pull --ff-only
@@ -22,12 +22,12 @@ python -m pip install -e '.[dev]'
 ```
 
 The revised source has not been pushed to GitHub on your behalf. To use the
-supplied release locally, download GROOVE_v1.0.6.zip into Windows Downloads,
+supplied release locally, download GROOVE_v1.0.7.zip into Windows Downloads,
 then copy its source over the existing clone (existing data/results remain):
 
 ```bash
 groove_release_dir=$(mktemp -d)
-python -m zipfile -e /mnt/c/Users/aidan/Downloads/GROOVE_v1.0.6.zip "$groove_release_dir"
+python -m zipfile -e /mnt/c/Users/aidan/Downloads/GROOVE_v1.0.7.zip "$groove_release_dir"
 cp -a "$groove_release_dir/GROOVE/." /mnt/c/Users/aidan/TFM/GROOVE/
 python -m pip install -e '.[dev]'
 ```
@@ -46,7 +46,7 @@ python -m pip freeze > environment.txt
 git rev-parse HEAD
 ```
 
-Expected version: groove 1.0.6. The release has 56 tests. A seeded UMAP warning
+Expected version: groove 1.0.7. The release has 56 tests. A seeded UMAP warning
 about n_jobs=1 is expected. Stop and retain the traceback if tests fail.
 After copying a release over a clone, its Git commit still identifies the old
 committed source until you commit the edits; record the local diff as well.
@@ -291,7 +291,7 @@ credential scripts. For real data, use identical raw files, inputs, filters,
 alias references/manual labels and parameters. Original cleaner rescue was on;
 GROOVE defaults off. Original morphology was orange-only; GROOVE defaults both
 filters on. Match these settings before assessing numerical parity.
-The new 1.0.6 review-label rule deliberately differs from the original routing,
+The new 1.0.7 review-label rule deliberately differs from the original routing,
 while leaving numerical period searches unchanged.
 
 ## 12. Record evidence and finish
@@ -309,14 +309,14 @@ unset ATLAS_TOKEN
 
 ## Update, test and push your source to GitHub
 
-Download GROOVE_v1.0.6.zip and update_GROOVE_and_push_v1.0.6.sh to Windows Downloads.
+Download GROOVE_v1.0.7.zip and update_GROOVE_and_push_v1.0.7.sh to Windows Downloads.
 From the existing authenticated clone, with groove-test active:
 
 ```bash
 cd /mnt/c/Users/aidan/TFM/GROOVE
 conda activate groove-test
-bash /mnt/c/Users/aidan/Downloads/update_GROOVE_and_push_v1.0.6.sh \
-  /mnt/c/Users/aidan/Downloads/GROOVE_v1.0.6.zip
+bash /mnt/c/Users/aidan/Downloads/update_GROOVE_and_push_v1.0.7.sh \
+  /mnt/c/Users/aidan/Downloads/GROOVE_v1.0.7.zip
 ```
 
 The script backs up overwritten files, preserves existing configs and target
