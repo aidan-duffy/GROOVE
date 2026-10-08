@@ -28,10 +28,9 @@ def token_lock(token):
     directory = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / ".cache"))) / "groove"
     directory.mkdir(parents=True, exist_ok=True)
     with (directory / f"atlas_{digest}.lock").open("a+b") as handle:
-        handle.seek(0)
-        if handle.read(1) == b"":
-            handle.write(b"0")
-            handle.flush()
+        # Acquire before accessing the locked byte: Windows denies reads of
+        # byte ranges already locked by another handle. It permits locking
+        # beyond EOF, so a new empty file can be locked before initialization.
         handle.seek(0)
         try:
             if os.name == "nt":
@@ -43,6 +42,9 @@ def token_lock(token):
         except OSError as exc:
             raise RuntimeError("Another GROOVE download is already using this token. Let it finish or stop it first.") from exc
         try:
+            if os.fstat(handle.fileno()).st_size == 0:
+                handle.write(b"0")
+                handle.flush()
             yield
         finally:
             if os.name == "nt":

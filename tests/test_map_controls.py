@@ -27,7 +27,7 @@ def test_marker_mapping_validation():
 def test_interactive_dataset_shapes_and_comparison_controls(tmp_path):
     plots.make_interactive_map(table(), 'combined_umap_1', 'combined_umap_2',
         'Test', 'test', tmp_path, {}, True, dataset_markers={'demo': 'diamond'})
-    html = (tmp_path / 'maps/test_interactive.html').read_text()
+    html = (tmp_path / 'maps/test_interactive.html').read_text(encoding='utf-8')
     assert '"symbol":"diamond"' in html and '"symbol":"circle"' in html
     assert 'Dataset: demo' in html and 'Dataset: reference' in html
     assert 'plotly_selected' in html and 'Compare selected light curves' in html

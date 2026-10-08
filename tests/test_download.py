@@ -165,3 +165,12 @@ def test_download_receipt_skips_auth_when_complete_and_rerun_refetches(download_
     obj.validate_authentication.assert_not_called()
     assert pipeline.run_download(download_config, rerun=True) == 0
     assert obj.submit_job.call_count > submitted
+
+
+def test_token_lock_released_after_error(tmp_path, monkeypatch):
+    monkeypatch.setenv('LOCALAPPDATA', str(tmp_path))
+    with pytest.raises(ValueError, match='interrupted'):
+        with run.token_lock('fake-release-token'):
+            raise ValueError('interrupted')
+    with run.token_lock('fake-release-token'):
+        pass

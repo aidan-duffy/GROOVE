@@ -42,7 +42,7 @@ def test_new_map_links_to_the_new_phase_plot_location(tmp_path):
         'combined_umap_1': [0.], 'combined_umap_2': [1.]})
     plots.make_interactive_map(table, 'combined_umap_1', 'combined_umap_2',
         'Test', 'test', state, {}, False)
-    html = (figures / 'maps/test_interactive.html').read_text()
+    html = (figures / 'maps/test_interactive.html').read_text(encoding='utf-8')
     import json, re
     data = json.loads(re.search(r'"customdata":(\[\[.*?\]\])', html).group(1))
     assert data[0][0] == gid

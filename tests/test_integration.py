@@ -204,7 +204,7 @@ def test_interactive_map_links_to_saved_phase_image(tmp_path):
                           'combined_umap_1': [0.], 'combined_umap_2': [1.]})
     make_interactive_map(table, 'combined_umap_1', 'combined_umap_2', 'Test',
                          'test', tmp_path, {}, False)
-    text = (tmp_path / 'maps/test_interactive.html').read_text()
+    text = (tmp_path / 'maps/test_interactive.html').read_text(encoding='utf-8')
     assert gid in text and 'plotly_click' in text
     assert '__phase_fold.png' in text and 'cdn.plot.ly' not in text.split('<script')[0]
     assert 'plotly.js v' in text
