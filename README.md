@@ -1,18 +1,8 @@
 # GROOVE
 
-GROOVE is a Python package for finding and reviewing unusual variability in
-ATLAS light curves, developed from Aidan Duffy's MSc thesis, *The Search for
-Exotic Transits* (Universidad Autónoma de Madrid, 2026). It connects downloading,
-cleaning, source selection, period searching and morphology analysis in one
-workflow, with diagnostic plots and interactive maps. Each stage can also run
-separately.
-
-The accompanying paper is **in preparation**. If you use GROOVE, please cite
-this software using [CITATION.cff](CITATION.cff) and record the version or commit
-used. Paper citation details will be added when available.
-
-All feedback, bug reports and suggestions are welcome. Contact
-[Aidan Duffy](mailto:aidan.duffy@estudiante.uam.es).
+GROOVE downloads, cleans and analyses ATLAS light curves, then assigns morphology
+suggestions and builds interactive maps for reviewing unusual variability.
+One configuration connects all five stages. Each stage can also run separately.
 
 ## Find your workflow
 
@@ -27,8 +17,6 @@ All feedback, bug reports and suggestions are welcome. Contact
 - [Add targets to an existing map](#add-targets-to-an-existing-map)
 - [Configure plots and analysis](#settings-and-scientific-interpretation)
 - [Read all configuration options](docs/configuration.md)
-- [Browse the documentation](docs/README.md)
-- [Validation evidence and limitations](docs/validation.md)
 - [Adapt data from other surveys](docs/data_workflows.md#other-surveys-adaptation-not-currently-validated-support)
 
 ## Install
