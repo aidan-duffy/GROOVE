@@ -1,8 +1,22 @@
 # GROOVE
 
-GROOVE downloads, cleans and analyses ATLAS light curves, then assigns morphology
-suggestions and builds interactive maps for reviewing unusual variability.
-One configuration connects all five stages. Each stage can also run separately.
+**Author:** Aidan Duffy
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+GROOVE is a Python package for finding and reviewing unusual variability in
+ATLAS light curves. It connects downloading, cleaning, source selection, period
+searching and morphology analysis in one workflow, with diagnostic plots and
+interactive maps. Each stage can also run separately. Other photometric
+datasets can be adapted by formatting them to the required input schema and
+checking that the quality cuts and analysis settings suit the data.
+
+The accompanying paper is **in preparation**. If you use GROOVE, please cite
+this software using [CITATION.cff](https://github.com/aidan-duffy/GROOVE/blob/main/CITATION.cff)
+and record the version or commit used.
+
+All feedback, bug reports and suggestions are welcome. Contact
+[Aidan Duffy](mailto:aidan.duffy@estudiante.uam.es).
 
 ## Find your workflow
 
@@ -17,6 +31,8 @@ One configuration connects all five stages. Each stage can also run separately.
 - [Add targets to an existing map](#add-targets-to-an-existing-map)
 - [Configure plots and analysis](#settings-and-scientific-interpretation)
 - [Read all configuration options](docs/configuration.md)
+- [Browse the documentation](docs/README.md)
+- [Validation evidence and limitations](docs/validation.md)
 - [Adapt data from other surveys](docs/data_workflows.md#other-surveys-adaptation-not-currently-validated-support)
 
 ## Install
