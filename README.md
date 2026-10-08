@@ -4,58 +4,32 @@ GROOVE downloads, cleans and analyses ATLAS light curves, then assigns morpholog
 suggestions and builds interactive maps for reviewing unusual variability.
 One configuration connects all five stages. Each stage can also run separately.
 
-| Stage | Purpose | Main output |
-|---|---|---|
-| `download` | Retrieve forced photometry with your ATLAS token; resume saved jobs | One raw CSV per source |
-| `clean` | Remove measurements failing photometric and image-quality checks | Cleaned CSVs, retention and rejection tables |
-| `select` | Select sources with enough observations, baseline and usable precision | Selected light curves and rejection reasons |
-| `periods` | Search with Lomb–Scargle; diagnose aliases and harmonics; optionally check BLS | One recommendation per source, diagnostic tables and plots |
-| `morphology` | Measure light-curve shapes, suggest families, apply manual labels and optionally fit UMAP | Source catalogue, review plots and interactive maps |
-
-The scientific routines originate from Aidan Duffy's MSc thesis, *The Search
-for Exotic Transits* (Universidad Autónoma de Madrid, 2026). The package retains
-the detailed analysis rather than reducing it to a single periodogram or
-embedding. Automatic labels are review suggestions; a `transit` label describes
-shape and does not establish a planetary interpretation.
-
 ## Find your workflow
 
-- [Download ATLAS targets](#analyse-your-targets)
-- [Use your existing data and skip stages](docs/data_workflows.md#existing-raw-atlas-photometry-skip-downloading)
-- [Restart interrupted runs or deliberately recalculate](docs/restarts.md)
-- [Run each stage separately](docs/data_workflows.md#run-stage-by-stage)
-- [Resume from cleaned/selected data](docs/data_workflows.md#resume-at-a-later-stage)
-- [Add a second sample to the same map](#add-targets-to-an-existing-map)
-- [Dataset shapes, star highlighting and side-by-side comparison](docs/map_controls.md)
-- [Configuration options and defaults](docs/configuration.md)
-- [What other surveys would require](docs/data_workflows.md#other-surveys-adaptation-not-currently-validated-support)
-
-Version 1.0.9 keeps O/C-only period searches and three default overview maps.
-Field alias learning now works without a combined-band search. See the
-[alias-learning fix](docs/release_1_0_8.md).
-Dataset shapes are optional. Saved maps can be redrawn without refitting.
-
-## Restart or recalculate
-
-Resume is automatic: rerun the same command with the same configuration and
-output folder. Completed stages are checked and skipped; interrupted stages
-reuse compatible source and plot checkpoints.
-
-```bash
-groove run -c run.yaml --skip-download           # resume existing photometry workflow
-groove periods -c run.yaml                      # resume just the period stage
-groove run -c run.yaml --skip-download --rerun   # deliberately recalculate all analysis stages
-groove morphology --rerun -c run.yaml           # recalculate morphology and its outputs
-```
-
-Keep `--skip-download` when using existing raw data. A full `--rerun` without it
-also requests fresh downloads. If a forced rerun is interrupted, omit `--rerun`
-on the next invocation to resume the newly saved work. See
-[restart details and limitations](docs/restarts.md).
+- [Install GROOVE](#install)
+- [Try the synthetic demo](#try-it-without-an-atlas-account)
+- [Download ATLAS photometry](#download-atlas-photometry)
+- [Run the full pipeline](#run-the-full-pipeline)
+- [Run individual stages](#run-individual-stages)
+- [Use existing photometry](#use-existing-photometry)
+- [Find your results](#results)
+- [Restart or recalculate](#restart-or-recalculate)
+- [Add targets to an existing map](#add-targets-to-an-existing-map)
+- [Configure plots and analysis](#settings-and-scientific-interpretation)
+- [Read all configuration options](docs/configuration.md)
+- [Adapt data from other surveys](docs/data_workflows.md#other-surveys-adaptation-not-currently-validated-support)
 
 ## Install
 
-Use Python **3.10–3.12**. Open a terminal in the extracted `GROOVE` folder:
+Use Python **3.10–3.12**. Download and extract the repository ZIP from GitHub,
+or clone it:
+
+```bash
+git clone https://github.com/aidan-duffy/GROOVE.git
+cd GROOVE
+```
+
+Open a terminal in the `GROOVE` folder and create an environment:
 
 ```bash
 python -m venv .venv
@@ -89,7 +63,7 @@ artificial. This is an installation and integration demonstration, not a
 survey completeness measurement. To repeat the fitted morphology stage, use
 `groove morphology -c groove_demo/run.yaml -- --overwrite`.
 
-## Analyse your targets
+## Download ATLAS photometry
 
 1. Create a CSV with a source ID and coordinates in degrees, for example:
 
@@ -134,36 +108,68 @@ survey completeness measurement. To repeat the fitted morphology stage, use
    A token is needed only for downloads. It is never written to configuration,
    progress or output files.
 
-4. Check the selection, then run:
+4. Preview the target selection, then download:
 
    ```bash
    groove download -c run.yaml --dry-run
-   groove run -c run.yaml
+   groove download -c run.yaml
    ```
 
    Dry runs make no requests and do not change files. Downloads process one
-   source at a time and save progress after each state change. Rerun the same
-   command after an interruption to resume saved task or result URLs. Service
-   time depends on the ATLAS queue; the displayed estimate is configurable.
+   source at a time and save progress after each state change. Repeat the same
+   command after an interruption to resume saved tasks. Service time depends
+   on the ATLAS queue.
 
-Stages can be run independently with `groove download`, `groove clean`,
-`groove select`, `groove periods` or `groove morphology`, each with `-c run.yaml`.
+## Run the full pipeline
+
+After downloading, run cleaning, selection, period searching and morphology:
+
+```bash
+groove run -c run.yaml --skip-download
+```
+
+To download and analyse in one command instead:
+
+```bash
+groove run -c run.yaml
+```
+
 A nonzero download result stops the full pipeline before analysis begins.
+`-c` selects the configuration file. Paths inside it are relative to that file.
+See [Results](#results) for the output folders.
 
-## Other ATLAS data access
+## Run individual stages
 
-The [ATLAS data directory](http://dtn-itc.ifa.hawaii.edu/atlas/atclass/)
-is included as an additional resource. The directory inspected on 7 October
-2026 lists reduced/difference images, detection-classification products and
-`dclass`/`nnc` manuals. It is not a drop-in per-star light-curve download endpoint.
+Use the same configuration for each stage, in this order:
 
-GROOVE analyses photometry tables, not image pixels or individual detection
-classification vectors. FITS images need photometric extraction first; renaming
-or converting an image file to CSV does not create a light curve. If you obtain
-per-source time-series photometry from an archive or a separate extraction
-workflow, prepare it as the CSV format below, then use `input_folder` and
-`--skip-download`. Check the data's baseline and provenance; archive products
-are not automatically equivalent to a fresh forced-photometry request.
+```bash
+groove download -c run.yaml
+groove clean -c run.yaml
+groove select -c run.yaml
+groove periods -c run.yaml
+groove morphology -c run.yaml
+```
+
+Skip `download` when using existing photometry. Each later stage needs the
+appropriate inputs from the preceding stage or explicit input paths in the
+configuration. The period stage normally reads the selected light curves;
+morphology uses them together with the period recommendations.
+
+For starting from cleaned or selected data, see
+[existing-data workflows](docs/data_workflows.md#resume-at-a-later-stage).
+Read [stage details](docs/stages.md) for each stage's inputs and outputs.
+
+To see available commands and options:
+
+```bash
+groove --help
+groove periods --help
+```
+
+Replace `periods` with any stage name for its help. Analysis commands require a
+YAML configuration; `-c` and `--config` are equivalent. Utility commands such as
+`init`, `demo` and `targets` do not require one. Most scientific and plotting
+settings belong in the YAML; see [configuration options](docs/configuration.md).
 
 ## Use existing photometry
 
@@ -187,16 +193,6 @@ The cleaner retains noise-consistent negative forced fluxes. Magnitude-based
 morphology uses finite magnitudes and positive measured fluxes; such rows may
 therefore be retained by cleaning but unavailable to morphology.
 
-## One star or a small sample
-
-A reference UMAP fit needs at least **five usable sources**. For fewer sources,
-use `morphology: {mode: classify}`. It measures the same features, assigns the
-same rules and writes tables and phase plots without fitting a map. You can
-also stop after period searching with `groove run -c run.yaml --skip-morphology`.
-
-`configs/single_target.yaml` illustrates the classification route. Its target
-CSV and Gaia ID must be replaced with your real values.
-
 ## Results
 
 | Path under `output_folder` | Contents |
@@ -214,6 +210,50 @@ Morphology figures live in `plots/ML/<run>/`, including maps, phase folds, categ
 Start with the period recommendation table and morphology `tables/all_sources.csv`.
 Open `maps/*interactive.html` in a browser. Keep the surrounding output tree
 with the HTML so linked images remain accessible.
+
+## Pipeline overview
+
+| Stage | Purpose | Main output |
+|---|---|---|
+| `download` | Retrieve forced photometry with your ATLAS token; resume saved jobs | One raw CSV per source |
+| `clean` | Remove measurements failing photometric and image-quality checks | Cleaned CSVs, retention and rejection tables |
+| `select` | Select sources with enough observations, baseline and usable precision | Selected light curves and rejection reasons |
+| `periods` | Search with Lomb–Scargle; diagnose aliases and harmonics; optionally check BLS | One recommendation per source, diagnostic tables and plots |
+| `morphology` | Measure light-curve shapes, suggest families, apply manual labels and optionally fit UMAP | Source catalogue, review plots and interactive maps |
+
+The scientific routines originate from Aidan Duffy's MSc thesis, *The Search
+for Exotic Transits* (Universidad Autónoma de Madrid, 2026). The package retains
+the detailed analysis rather than reducing it to a single periodogram or
+embedding. Automatic labels are review suggestions; a `transit` label describes
+shape and does not establish a planetary interpretation.
+
+## Restart or recalculate
+
+Resume is automatic: rerun the same command with the same configuration and
+output folder. Completed stages are checked and skipped; interrupted stages
+reuse compatible source and plot checkpoints.
+
+```bash
+groove run -c run.yaml --skip-download           # resume existing photometry workflow
+groove periods -c run.yaml                      # resume just the period stage
+groove run -c run.yaml --skip-download --rerun   # deliberately recalculate all analysis stages
+groove morphology --rerun -c run.yaml           # recalculate morphology and its outputs
+```
+
+Keep `--skip-download` when using existing raw data. A full `--rerun` without it
+also requests fresh downloads. If a forced rerun is interrupted, omit `--rerun`
+on the next invocation to resume the newly saved work. See
+[restart details and limitations](docs/restarts.md).
+
+## One star or a small sample
+
+A reference UMAP fit needs at least **five usable sources**. For fewer sources,
+use `morphology: {mode: classify}`. It measures the same features, assigns the
+same rules and writes tables and phase plots without fitting a map. You can
+also stop after period searching with `groove run -c run.yaml --skip-morphology`.
+
+`configs/single_target.yaml` illustrates the classification route. Its target
+CSV and Gaia ID must be replaced with your real values.
 
 ## Add targets to an existing map
 
@@ -261,6 +301,21 @@ the map; double-click to reset. Remove individual previews or clear the selectio
 
 ## Settings and scientific interpretation
 
+Period searches and saved period plots default to O and C. To also analyse
+combined photometry while keeping only O/C plots:
+
+```yaml
+periods:
+  series_to_run: [combined, o, c]
+  plot_series: [o, c]
+  alias_learning_series: combined
+```
+
+Combined analysis can change field alias learning and source recommendations;
+disabling only its plots preserves that analysis. The default alias-learning
+mode is `auto`: it uses combined peaks when available, otherwise pools O/C
+peaks while counting each star once. These approaches are not equivalent.
+
 Override defaults under `download`, `clean`, `select`, `periods` or `morphology`.
 For example:
 
@@ -287,21 +342,20 @@ flags rather than automatic exclusions. UMAP coordinates describe local feature
 similarity and are not physical axes or a classifier. Read
 [stage details](docs/stages.md) and [morphology notes](docs/morphology_details.md).
 
-## Development and citation
+## Other ATLAS data access
 
-```bash
-python -m pip install -e ".[dev]"
-python -m pytest
-python -m build
-```
+The [ATLAS data directory](http://dtn-itc.ifa.hawaii.edu/atlas/atclass/)
+is included as an additional resource. The directory inspected on 7 October
+2026 lists reduced/difference images, detection-classification products and
+`dclass`/`nnc` manuals. It is not a drop-in per-star light-curve download endpoint.
 
-The tests cover stage integration, seeded period recovery, download resumption,
-configuration, cleaning and morphology regressions. The downloadable demo runs
-the full map workflow. The original thesis scripts and credentials are not
-required for installation and are not included in this distribution.
-
-`CITATION.cff` supplies citation metadata. Include the acknowledgements required
-by the ATLAS service when publishing analyses. Licence: MIT.
+GROOVE analyses photometry tables, not image pixels or individual detection
+classification vectors. FITS images need photometric extraction first; renaming
+or converting an image file to CSV does not create a light curve. If you obtain
+per-source time-series photometry from an archive or a separate extraction
+workflow, prepare it as the CSV format below, then use `input_folder` and
+`--skip-download`. Check the data's baseline and provenance; archive products
+are not automatically equivalent to a fresh forced-photometry request.
 
 ## Extended demonstration and Linux validation
 
@@ -327,3 +381,19 @@ an injected 8.3-day stellar wave. Its rank-two stellar peak clears the existing
 replacement threshold, so the automatic alias-candidate figure shows the true
 period being recommended over rank one. This differs from the original daily
 example, which remains flagged because its stellar peak is too weak to promote.
+
+## Development and citation
+
+```bash
+python -m pip install -e ".[dev]"
+python -m pytest
+python -m build
+```
+
+The tests cover stage integration, seeded period recovery, download resumption,
+configuration, cleaning and morphology regressions. The downloadable demo runs
+the full map workflow. The original thesis scripts and credentials are not
+required for installation and are not included in this distribution.
+
+`CITATION.cff` supplies citation metadata. Include the acknowledgements required
+by the ATLAS service when publishing analyses. Licence: MIT.
