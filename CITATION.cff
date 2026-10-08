@@ -7,7 +7,7 @@ authors:
     given-names: Aidan
 version: 1.0.9
 date-released: 2026-10-07
-license: MIT
+license: GPL-3.0-only
 references:
   - type: thesis
     title: "The Search for Exotic Transits"

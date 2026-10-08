@@ -2,7 +2,7 @@
 
 **Author:** Aidan Duffy
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 GROOVE is a Python package for finding and reviewing unusual variability in
 ATLAS light curves. It connects downloading, cleaning, source selection, period
@@ -412,4 +412,4 @@ the full map workflow. The original thesis scripts and credentials are not
 required for installation and are not included in this distribution.
 
 `CITATION.cff` supplies citation metadata. Include the acknowledgements required
-by the ATLAS service when publishing analyses. Licence: MIT.
+by the ATLAS service when publishing analyses. Licence: GNU GPL version 3 only (`GPL-3.0-only`); see [LICENSE](LICENSE).

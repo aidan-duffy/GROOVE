@@ -7,7 +7,7 @@ name = "groove"
 version = "1.0.9"
 description = "Periodic-variability and deep-occultation search in ATLAS light curves of young stars"
 readme = "README.md"
-license = {text = "MIT"}
+license = {text = "GPL-3.0-only"}
 authors = [{name = "Aidan Duffy"}]
 requires-python = ">=3.10,<3.13"
 dependencies = [

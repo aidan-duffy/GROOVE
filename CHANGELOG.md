@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Change the current source licence from MIT to GNU GPL version 3 only (`GPL-3.0-only`); align the README and package/citation metadata. Permissions previously granted for MIT-distributed copies remain unaffected.
+
 - Reorder README around installation, demonstration and common workflows; add citation and feedback guidance.
 - Consolidate documentation into stable guides, one validation page and this changelog.
 - Windows compatibility patch: acquire the token lock before accessing its byte range; explicitly read generated HTML as UTF-8 in tests; test lock release after errors. Native Windows verification is pending.
