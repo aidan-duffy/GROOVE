@@ -146,4 +146,4 @@ settings linked above for supported plotting options.
   Only rank one has a stored sampling-window value in the adoption pass;
   other ranks retain universal/field scoring without a time-array window value.
 
-The complete 1.1.0 change and verification record is [CHANGES_APPLIED.md](../CHANGES_APPLIED.md).
+See [CHANGELOG.md](../CHANGELOG.md) for release changes.

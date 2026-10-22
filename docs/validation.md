@@ -98,11 +98,10 @@ validation calculations can repeat during output repair. This release does not
 add per-source timeouts or parallel LS/BLS workers.
 
 
-## Version 1.1.0 implementation audit
+## Version 1.1.0 validation
 
-The baseline and historical results above are retained as historical evidence.
-See [CHANGES_APPLIED.md](../CHANGES_APPLIED.md) for current environment versions,
-scientific regression cases, serial/parallel equality, interruption recovery,
-per-module test runs, extended-demo checks and the remaining validation limits.
+The results above are retained as historical evidence.
+Version 1.1.0 checks covered scientific regressions, serial/parallel
+consistency, interruption recovery and the extended demo.
 Python/NumPy compatibility tests do not establish scientific catalogue purity or
 live authenticated ATLAS service availability.
