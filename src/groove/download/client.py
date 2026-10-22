@@ -1,21 +1,24 @@
 from __future__ import annotations
+
 import argparse
 import hashlib
 import os
 import re
 import time
+from collections.abc import Callable
 from io import StringIO
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any
 from urllib.parse import urljoin, urlparse
+
 import pandas as pd
 import requests
 from pandas.errors import EmptyDataError
-from . import settings as S
+
+from .. import execution as _execution
 from . import run as _run
+from . import settings as S
 from . import storage as _storage
 from . import targets as _targets
-
-
 
 
 class AuthenticationError(RuntimeError):
@@ -39,7 +42,7 @@ class AtlasClient:
         )
 
     @property
-    def timeout(self) -> Tuple[int, int]:
+    def timeout(self) -> tuple[int, int]:
         return S.CONNECT_TIMEOUT_SECONDS, S.READ_TIMEOUT_SECONDS
 
     def close(self) -> None:
@@ -66,7 +69,8 @@ class AtlasClient:
             if isinstance(body, dict):
                 return str(body.get("detail") or body.get("error") or body)
             return str(body)
-        except Exception:
+        except Exception as _caught_error:
+            _execution.report_exception(_caught_error, __name__)
             return response.text[:1000]
 
     def _retry_wait(self, message: str, attempt: int) -> float:
@@ -82,11 +86,11 @@ class AtlasClient:
         self,
         ra: float,
         dec: float,
-        mjd_min: Optional[float],
-        mjd_max: Optional[float],
+        mjd_min: float | None,
+        mjd_max: float | None,
         mode: str,
-    ) -> Tuple[str, str]:
-        payload: Dict[str, Any] = {
+    ) -> tuple[str, str]:
+        payload: dict[str, Any] = {
             "ra": float(ra),
             "dec": float(dec),
             "use_reduced": _storage.mode_to_use_reduced(mode),
@@ -162,8 +166,8 @@ class AtlasClient:
     def poll_job(
         self,
         task_url: str,
-        state_callback: Callable[[str, Dict[str, Any]], None],
-    ) -> Dict[str, Any]:
+        state_callback: Callable[[str, dict[str, Any]], None],
+    ) -> dict[str, Any]:
         start = time.monotonic()
         consecutive_errors = 0
         previous_state = ""
@@ -228,10 +232,7 @@ class AtlasClient:
                 state_callback("completed", task)
                 return task
 
-            if task.get("starttimestamp") or task_status in {"running", "started"}:
-                state = "running"
-            else:
-                state = "submitted"
+            state = "running" if task.get("starttimestamp") or task_status in {"running", "started"} else "submitted"
 
             now = time.monotonic()
             if state != previous_state:
@@ -286,9 +287,11 @@ class AtlasClient:
             except EmptyDataError:
                 return pd.DataFrame()
             except Exception as first_error:
+                _execution.report_exception(first_error, __name__)
                 try:
                     df = pd.read_csv(StringIO(text))
                 except Exception as second_error:
+                    _execution.report_exception(second_error, __name__)
                     raise PermanentJobError(
                         "Downloaded result could not be parsed as whitespace- or "
                         f"comma-separated data: {first_error}; {second_error}"
@@ -310,7 +313,7 @@ def extract_job_id(task_url: str) -> str:
     return path.split("/")[-1] if path else hashlib.sha1(task_url.encode()).hexdigest()[:12]
 
 
-def extract_result_url(task: Dict[str, Any]) -> str:
+def extract_result_url(task: dict[str, Any]) -> str:
     for key in ("result_url", "resulturl", "result", "download_url", "data_url"):
         value = task.get(key)
         if value:
@@ -322,5 +325,5 @@ def load_token() -> str:
     """Read the user's token without writing it to configs or progress files."""
     token = os.environ.get("ATLAS_TOKEN", "").strip()
     if not token or token == "your-token-here":
-        raise EnvironmentError("Set ATLAS_TOKEN to your ATLAS forced-photometry token before downloading.")
+        raise OSError("Set ATLAS_TOKEN to your ATLAS forced-photometry token before downloading.")
     return token

@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
-from . import __version__, config, pipeline
+from . import __version__, config, execution, pipeline
 
 
 def cmd_init(args):
@@ -45,6 +46,10 @@ def cmd_targets(args):
 def cmd_stage(args):
     cfg = config.load(args.config)
     stage = args.command
+    if getattr(args, "n_jobs", None) is not None:
+        if args.n_jobs == 0:
+            raise ValueError("--n-jobs must be a non-zero integer")
+        cfg.periods["period_n_jobs"] = args.n_jobs
     if stage == "run":
         pipeline.run_all(cfg, skip_download=args.skip_download, skip_morphology=args.skip_morphology, rerun=args.rerun)
     elif stage == "download":
@@ -105,6 +110,9 @@ def build_parser() -> argparse.ArgumentParser:
     ):
         s = sub.add_parser(name, help=helptext)
         s.add_argument("--config", "-c", required=True)
+        s.add_argument("--strict", action="store_true", help="stop at the first caught stage error")
+        if name in {"run", "periods"}:
+            s.add_argument("--n-jobs", type=int, help="period-search workers (default 1; -1 uses available CPUs)")
         s.add_argument("--rerun", action="store_true",
                        help="recalculate this stage (or every requested stage for run), including plots")
         if name == "download":
@@ -122,9 +130,19 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
+    package_logger = logging.getLogger("groove")
+    if not any(getattr(handler, "_groove_console", False) for handler in package_logger.handlers):
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        handler._groove_console = True
+        package_logger.addHandler(handler)
+    package_logger.setLevel(logging.INFO)
     try:
-        return args.func(args) or 0
+        with execution.error_policy(getattr(args, "strict", False)):
+            return args.func(args) or 0
     except (ValueError, KeyError, OSError, RuntimeError) as exc:
+        if getattr(args, "strict", False):
+            raise
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:

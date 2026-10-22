@@ -11,4 +11,9 @@ Pipeline stages (each is a sub-package with the same layout):
 `groove.pipeline` wires them together from a single YAML config;
 `groove.cli` exposes the `groove` command.
 """
-__version__ = "1.0.9"
+
+__version__ = "1.1.0"
+
+import logging
+
+logging.getLogger(__name__).addHandler(logging.NullHandler())

@@ -1,19 +1,22 @@
 from __future__ import annotations
+
 from pathlib import Path
 
+from .. import execution as _execution
 
 try:
     from astropy.timeseries import BoxLeastSquares
-except Exception:  # astropy versions/environments without BLS
+except Exception as _caught_error:  # astropy versions/environments without BLS
+    _execution.report_exception(_caught_error, __name__)
     BoxLeastSquares = None
 
 
 # =============================================================================
 # 1. PATHS
 # =============================================================================
-INPUT_DIR: Path = Path("UNSET_INPUT")    # set by the pipeline config (selected cleaned light curves)
+INPUT_DIR: Path = Path("UNSET_INPUT")  # set by the pipeline config (selected cleaned light curves)
 OUTPUT_DIR: Path = Path("UNSET_OUTPUT")  # set by the pipeline config
-PLOT_DIR: Path | None = None             # set by the pipeline config; None = OUTPUT_DIR/"plots"
+PLOT_DIR: Path | None = None  # set by the pipeline config; None = OUTPUT_DIR/"plots"
 
 
 def plot_root() -> Path:
@@ -42,6 +45,8 @@ CATALOG_PERIOD_COLUMN = "period_days"
 SKIP_ALREADY_PROCESSED = True
 CHECKPOINT_EVERY_N_FILES = 500  # Full-table snapshots; each source also has an atomic journal.
 MAX_FILES: int | None = None
+PERIOD_N_JOBS = 1  # Opt-in process parallelism; -1 uses available CPUs.
+STRICT_ERRORS = False  # Internal snapshot of the scoped CLI error policy.
 SERIES_TO_RUN = ["o", "c"]
 # Independent saving selection; combined is opt-in for both analysis and plots.
 PLOT_SERIES = ["o", "c"]
@@ -117,7 +122,7 @@ UNIVERSAL_ALIAS_TOLERANCE = 0.015
 
 WINDOW_FREQUENCIES = {
     "daily": 1.0,
-    "sesquidaily": 1.5,   # 2/3 day
+    "sesquidaily": 1.5,  # 2/3 day
     "lunar": 1.0 / 29.53059,
     "yearly": 1.0 / 365.25,
 }
@@ -126,7 +131,10 @@ WINDOW_POWER_WARNING = 0.40
 # Candidate scoring. Alias penalty cannot by itself reject a period if the
 # source gives strong support for it.
 ALIAS_SCORE_THRESHOLD = 0.50
-ALIAS_PENALTY_WEIGHT = 0.55
+# Shared by table adoption and visual diagnostics.
+ALIAS_WEIGHT_UNIVERSAL = 0.50
+ALIAS_WEIGHT_FIELD = 0.50
+ALIAS_WEIGHT_WINDOW = 0.35
 CROSS_FILTER_REWARD = 0.25
 SOURCE_COHERENCE_REWARD = 0.20
 
@@ -178,9 +186,16 @@ PLOT_TIME_SEGMENTS = 6
 # The first four retain the original four-segment colour scheme. Increasing the
 # segment count adds colours from the remainder of this stable palette.
 PLOT_TIME_COLOR_PALETTE = [
-    "tab:blue", "tab:orange", "tab:green", "tab:red",
-    "tab:purple", "tab:brown", "tab:pink", "tab:gray",
-    "tab:olive", "tab:cyan",
+    "tab:blue",
+    "tab:orange",
+    "tab:green",
+    "tab:red",
+    "tab:purple",
+    "tab:brown",
+    "tab:pink",
+    "tab:gray",
+    "tab:olive",
+    "tab:cyan",
 ]
 PLOT_TIME_SEGMENT_COLORS = PLOT_TIME_COLOR_PALETTE[:PLOT_TIME_SEGMENTS]
 BEST_PER_STAR_DIRNAME = "best_per_star"
@@ -219,9 +234,7 @@ RESTART_IF_CACHE_SCHEMA_INCOMPATIBLE = True
 # =============================================================================
 # These are recommendation labels, not hard truth labels. They are designed to
 # keep the science sample usable while making ambiguity explicit.
-RECOMMENDATION_LABELS = [
-    "strong", "alias_possible", "harmonic_possible", "weak_or_ambiguous", "nonvar"
-]
+RECOMMENDATION_LABELS = ["strong", "alias_possible", "harmonic_possible", "weak_or_ambiguous", "nonvar"]
 TAG_FOLDER_MAP = {
     "strong": "strong",
     "alias_possible": "alias",
@@ -308,10 +321,26 @@ COLUMN_ALIASES = {
 SOURCE_ID_COLUMNS = ["target_GaiaDR3", "gaia_dr3", "GaiaDR3", "source_id", "gaia_source_id", "target_id"]
 OBJECT_NAME_COLUMNS = ["object_name", "name", "Name", "target_name"]
 CLUSTER_COLUMNS = ["target_group", "target_cluster", "cluster_name", "cluster", "Cluster"]
-CLASS_COLUMNS = ["target_variability_class", "target_Class", "atlas_class", "xmatch_class", "best_class_name", "Class", "class"]
+CLASS_COLUMNS = [
+    "target_variability_class",
+    "target_Class",
+    "atlas_class",
+    "xmatch_class",
+    "best_class_name",
+    "Class",
+    "class",
+]
 PERIOD_COLUMNS = [
-    "target_catalogue_period_days", "target_best_period_days", "period_days", "catalogue_period", "catalog_period",
-    "xmatch_fp_period", "atlas_object_period", "fp_period", "xmatch_ls_pday", "ls_pday",
+    "target_catalogue_period_days",
+    "target_best_period_days",
+    "period_days",
+    "catalogue_period",
+    "catalog_period",
+    "xmatch_fp_period",
+    "atlas_object_period",
+    "fp_period",
+    "xmatch_ls_pday",
+    "ls_pday",
 ]
 RA_COLUMNS = ["target_ra_used", "ra_deg", "ra", "RA", "atlas_ra"]
 DEC_COLUMNS = ["target_dec_used", "dec_deg", "dec", "Dec", "DEC", "atlas_dec"]

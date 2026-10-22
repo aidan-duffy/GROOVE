@@ -1,24 +1,26 @@
 from __future__ import annotations
+
 import logging
 import math
 import traceback
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
+
 import joblib
 import numpy as np
 import pandas as pd
+
+from .. import execution as _execution
 from . import settings as S
 from . import utils as _utils
-
-
-
 
 # ===========================================================================
 # FEATURES
 # ===========================================================================
 
 
-def empty_profile(n_bins: int) -> Dict[str, Any]:
+def empty_profile(n_bins: int) -> dict[str, Any]:
     return {
         "raw": np.full(n_bins, np.nan), "normalised": np.zeros(n_bins),
         "uncertainty": np.full(n_bins, np.nan), "counts": np.zeros(n_bins, dtype=int),
@@ -30,7 +32,7 @@ def empty_profile(n_bins: int) -> Dict[str, Any]:
     }
 
 
-def phase_profile(frame: pd.DataFrame, period: float, n_bins: int, origin: float) -> Dict[str, Any]:
+def phase_profile(frame: pd.DataFrame, period: float, n_bins: int, origin: float) -> dict[str, Any]:
     """
     Binned phase profile plus a CORRECT significance.
 
@@ -129,7 +131,7 @@ def phase_profile(frame: pd.DataFrame, period: float, n_bins: int, origin: float
 
 
 def combine_band_profiles(profiles: Mapping[str, Mapping[str, Any]], n_bins: int,
-                          align: bool = True) -> Tuple[Dict[str, Any], Dict[str, float], int]:
+                          align: bool = True) -> tuple[dict[str, Any], dict[str, float], int]:
     """Inverse-variance style combination, weighted by per-band reliability."""
     present = [b for b in ("c", "o") if int(profiles[b].get("n_points", 0)) > 0]
     weights = {"c": 0.0, "o": 0.0}
@@ -201,7 +203,7 @@ def combine_band_profiles(profiles: Mapping[str, Mapping[str, Any]], n_bins: int
 
 def lomb_scargle_power(times: Sequence[float], values: Sequence[float],
                        min_period: float = 0.5, max_period: float = 200.0,
-                       n_frequencies: int = 3000) -> Dict[str, Any]:
+                       n_frequencies: int = 3000) -> dict[str, Any]:
     """The single Lomb-Scargle diagnostic used by this pipeline.
 
     The period-search pipeline stays authoritative: nothing here ever sets or
@@ -230,7 +232,8 @@ def lomb_scargle_power(times: Sequence[float], values: Sequence[float],
     try:
         power = np.asarray(lombscargle(t, v, 2.0 * np.pi / periods, normalize=True),
                            dtype=float)
-    except Exception:
+    except Exception as _caught_error:
+        _execution.report_exception(_caught_error, __name__)
         return empty
     if not np.any(np.isfinite(power)):
         return empty
@@ -242,7 +245,7 @@ def lomb_scargle_power(times: Sequence[float], values: Sequence[float],
             "ls_peak_ratio": float(power[peak] / max(baseline, 1e-12))}
 
 
-def align_profile(values: Sequence[float], n_smooth: int = 3) -> Tuple[np.ndarray, int]:
+def align_profile(values: Sequence[float], n_smooth: int = 3) -> tuple[np.ndarray, int]:
     """Rotate a phase profile to a canonical origin.
 
     THE FIX FOR THE UMAP GROUPING FAILURE.  Phase is measured from the first
@@ -276,7 +279,7 @@ def align_profile(values: Sequence[float], n_smooth: int = 3) -> Tuple[np.ndarra
     return np.roll(v, -shift), shift
 
 
-def fourier_descriptors(values: Sequence[float], n_harmonics: int = 4) -> Dict[str, float]:
+def fourier_descriptors(values: Sequence[float], n_harmonics: int = 4) -> dict[str, float]:
     """Phase-origin-invariant Fourier parameters.
 
     Amplitude ratios R21/R31/R41 and relative phases phi21/phi31/phi41 are the
@@ -284,12 +287,12 @@ def fourier_descriptors(values: Sequence[float], n_harmonics: int = 4) -> Dict[s
     describe shape alone.
     """
     v = _utils.circular_fill(np.asarray(values, dtype=float))
-    out: Dict[str, float] = {}
+    out: dict[str, float] = {}
     n = len(v)
     if n == 0 or not np.any(np.isfinite(v)) or np.nanstd(v) <= 0:
         for h in range(2, n_harmonics + 1):
-            out["fourier_R%d1" % h] = np.nan
-            out["fourier_phi%d1" % h] = np.nan
+            out[f'fourier_R{int(h):d}1'] = np.nan
+            out[f'fourier_phi{int(h):d}1'] = np.nan
         return out
     v = v - float(np.mean(v))
     phase = np.arange(n, dtype=float) / n
@@ -300,9 +303,9 @@ def fourier_descriptors(values: Sequence[float], n_harmonics: int = 4) -> Dict[s
         amps.append(math.hypot(a, b))
         phis.append(math.atan2(b, a))
     for h in range(2, n_harmonics + 1):
-        out["fourier_R%d1" % h] = float(amps[h - 1] / max(amps[0], 1e-12))
+        out[f'fourier_R{int(h):d}1'] = float(amps[h - 1] / max(amps[0], 1e-12))
         delta = phis[h - 1] - h * phis[0]
-        out["fourier_phi%d1" % h] = float(np.mod(delta + np.pi, 2 * np.pi) - np.pi)
+        out[f'fourier_phi{int(h):d}1'] = float(np.mod(delta + np.pi, 2 * np.pi) - np.pi)
     return out
 
 
@@ -383,14 +386,14 @@ def profile_peak_count(profile: Sequence[float], noise_level: float = 0.0,
     peaks = 0
     for i in range(n):
         left, right = smooth[(i - 1) % n], smooth[(i + 1) % n]
-        if smooth[i] >= left and smooth[i] >= right and smooth[i] >= prominence:
-            if smooth[i] > smooth[(i - 2) % n] and smooth[i] > smooth[(i + 2) % n]:
-                peaks += 1
+        if (smooth[i] >= left and smooth[i] >= right and smooth[i] >= prominence
+                and smooth[i] > smooth[(i - 2) % n] and smooth[i] > smooth[(i + 2) % n]):
+            peaks += 1
     return int(peaks)
 
 
 def profile_shape_metrics(normalised: Sequence[float], amplitude: float,
-                          bin_sigma: float) -> Dict[str, float]:
+                          bin_sigma: float) -> dict[str, float]:
     keys = ("dip_depth_norm", "flare_depth_norm", "dip_duty_cycle", "dip_width_bins",
             "secondary_dip_depth_norm", "secondary_dip_phase_separation",
             "out_of_dip_variation", "out_of_flare_variation",
@@ -400,7 +403,7 @@ def profile_shape_metrics(normalised: Sequence[float], amplitude: float,
             "harmonic_energy_ratio", "skewness")
     values = np.asarray(normalised, dtype=float)
     if not len(values) or not np.any(np.isfinite(values)) or np.nanstd(values) <= 0:
-        return {k: np.nan for k in keys}
+        return dict.fromkeys(keys, np.nan)
     values = _utils.circular_fill(values)
     n_bins = len(values)
     median = float(np.median(values))
@@ -492,13 +495,13 @@ def profile_shape_metrics(normalised: Sequence[float], amplitude: float,
         "skewness": float(pd.Series(values).skew()),
     }
     for i, c in enumerate(coefficients):
-        out["fourier_h%d_amplitude" % (i + 1)] = float(c)
+        out[f'fourier_h{int(i + 1):d}_amplitude'] = float(c)
     return out
 
 
 def grouped_excursion_events(frame: pd.DataFrame, z: np.ndarray, mask: np.ndarray,
                              event_type: str, min_points: int,
-                             window_days: float) -> List[Dict[str, Any]]:
+                             window_days: float) -> list[dict[str, Any]]:
     """Return auditable raw-time excursion groups, including rejected groups."""
     times = frame["time"].to_numpy(dtype=float)
     idx = np.flatnonzero(np.asarray(mask, dtype=bool))
@@ -512,7 +515,7 @@ def grouped_excursion_events(frame: pd.DataFrame, z: np.ndarray, mask: np.ndarra
     groups = np.split(np.arange(len(idx)), breaks) if len(breaks) else [np.arange(len(idx))]
     filters = frame["filter"].astype(str).to_numpy()
     errors = frame["err"].to_numpy(dtype=float)
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for event_number, group in enumerate(groups, start=1):
         points = idx[group]
         event_times = times[points]
@@ -545,7 +548,7 @@ def grouped_excursion_events(frame: pd.DataFrame, z: np.ndarray, mask: np.ndarra
 def residual_event_metrics(frame: pd.DataFrame, profiles: Mapping[str, Mapping[str, Any]],
                            period: float, origin: float, n_bins: int,
                            thresholds: Mapping[str, Any]
-                           ) -> Tuple[Dict[str, float], np.ndarray, List[Dict[str, Any]]]:
+                           ) -> tuple[dict[str, float], np.ndarray, list[dict[str, Any]]]:
     sigma_threshold = float(thresholds.get("event_sigma", 5.0))
     min_points = int(thresholds.get("flare_min_points_per_event", 2))
     window = float(thresholds.get("flare_event_window_days", 1.0))
@@ -605,7 +608,7 @@ def residual_event_metrics(frame: pd.DataFrame, profiles: Mapping[str, Mapping[s
     peak_flare = max((row["peak_residual_significance"] for row in validated_flare), default=0.0)
     peak_dim = max((row["peak_residual_significance"] for row in validated_dim), default=0.0)
     pts_flare = sum(int(row["n_measurements"]) for row in validated_flare)
-    pts_dim = sum(int(row["n_measurements"]) for row in validated_dim)
+    sum(int(row["n_measurements"]) for row in validated_dim)
     well_sampled = sum(int(row["n_measurements"] >= 3) for row in validated_flare)
     cross_filter = sum(int(row["has_cross_filter_support"]) for row in validated_flare)
     single_point = sum(int(row["n_measurements"] == 1) for row in flare_rows)
@@ -686,7 +689,7 @@ def coherent_dimming_metrics(frame: pd.DataFrame, period: float, origin: float,
                              dip_phase: float, duty_cycle: float,
                              dip_significance: float, out_of_dip_variation: float,
                              section_ids: np.ndarray, alias_possible: bool,
-                             n_bins: int = 64) -> Dict[str, float]:
+                             n_bins: int = 64) -> dict[str, float]:
     """Independent evidence for a phase-localised dimming.
 
     Each covered cycle must contain usable in-dip data and, where the cadence
@@ -714,7 +717,7 @@ def coherent_dimming_metrics(frame: pd.DataFrame, period: float, origin: float,
         "coherent_dimming_seasonal_penalty_component",
         "coherent_dimming_alias_penalty_component", "coherent_dimming_score",
     )
-    empty = {name: 0.0 for name in names}
+    empty = dict.fromkeys(names, 0.0)
     if not np.isfinite(period) or period <= 0 or len(frame) < 8:
         return empty
 
@@ -738,8 +741,8 @@ def coherent_dimming_metrics(frame: pd.DataFrame, period: float, origin: float,
 
     global_scale = max(_utils.spread_scale(mags), float(np.median(errors)), 1e-6)
     global_baseline = float(np.median(mags[~in_dip])) if (~in_dip).any() else float(np.median(mags))
-    contrasts: List[float] = []
-    supporting_cycles: List[int] = []
+    contrasts: list[float] = []
+    supporting_cycles: list[int] = []
     supporting_points = np.zeros(len(times), dtype=bool)
     covered = 0
     for cycle in np.unique(cycles[in_dip]):
@@ -785,7 +788,7 @@ def coherent_dimming_metrics(frame: pd.DataFrame, period: float, origin: float,
     # section identifies folds whose apparent shape is created by seasons.
     phase_groups = np.minimum((phases * 8).astype(int), 7)
     joint = np.zeros((8, max(int(sections.max()) + 1, 1)), dtype=float)
-    for p, s in zip(phase_groups, sections):
+    for p, s in zip(phase_groups, sections, strict=False):
         joint[p, s] += 1.0
     joint /= max(joint.sum(), 1.0)
     pp = joint.sum(axis=1, keepdims=True)
@@ -804,7 +807,8 @@ def coherent_dimming_metrics(frame: pd.DataFrame, period: float, origin: float,
     contrast_scatter = (_utils.spread_scale(contrasts) / max(abs(local_contrast), 1e-9)
                         if len(contrasts) >= 3 else 0.0)
 
-    clip = lambda value: float(np.clip(value, 0.0, 1.0))
+    def clip(value):
+        return float(np.clip(value, 0.0, 1.0))
     components = {
         "coherent_dimming_folded_significance_component": clip(dip_significance / 12.0),
         "coherent_dimming_phase_concentration_component": clip(
@@ -846,7 +850,7 @@ def coherent_dimming_metrics(frame: pd.DataFrame, period: float, origin: float,
     }
 
 
-def temporal_coherence_metrics(frame: pd.DataFrame, section_ids: np.ndarray) -> Dict[str, float]:
+def temporal_coherence_metrics(frame: pd.DataFrame, section_ids: np.ndarray) -> dict[str, float]:
     """Raw-time coherence diagnostics, deliberately independent of phase."""
     ordered = frame.assign(_section=np.asarray(section_ids, dtype=int)).sort_values("time")
     values = ordered["mag"].to_numpy(dtype=float)
@@ -865,7 +869,7 @@ def temporal_coherence_metrics(frame: pd.DataFrame, section_ids: np.ndarray) -> 
     groups = 0
     run = 0
     last_sign = 0.0
-    for is_extreme, sign in zip(extreme, signs):
+    for is_extreme, sign in zip(extreme, signs, strict=False):
         if is_extreme and sign == last_sign:
             run += 1
         elif is_extreme:
@@ -895,7 +899,7 @@ def temporal_coherence_metrics(frame: pd.DataFrame, section_ids: np.ndarray) -> 
 
 
 def compare_wave_dimming_models(frame: pd.DataFrame, period: float, origin: float,
-                                dip_phase: float, duty_cycle: float) -> Dict[str, float]:
+                                dip_phase: float, duty_cycle: float) -> dict[str, float]:
     """Three-fold held-out comparison of a Fourier wave and localised dip.
 
     Scores are inverse robust prediction errors with a small complexity penalty;
@@ -919,7 +923,7 @@ def compare_wave_dimming_models(frame: pd.DataFrame, period: float, origin: floa
     dim_x = np.column_stack([
         np.ones(len(phase)), np.exp(-0.5 * (distance / sigma) ** 2),
         np.exp(-0.5 * (distance / (2.0 * sigma)) ** 2)])
-    errors_by_model: Dict[str, List[float]] = {"wave": [], "dimming": []}
+    errors_by_model: dict[str, list[float]] = {"wave": [], "dimming": []}
     fold_id = np.arange(len(values)) % 3
     for fold in range(3):
         train, test = fold_id != fold, fold_id == fold
@@ -938,8 +942,8 @@ def compare_wave_dimming_models(frame: pd.DataFrame, period: float, origin: floa
             "wave_dimming_score_margin": dim_score - wave_score}
 
 
-def extract_source_features(source: Mapping[str, Any], period_record: Optional[Mapping[str, Any]],
-                            config: Mapping[str, Any]) -> Dict[str, Any]:
+def extract_source_features(source: Mapping[str, Any], period_record: Mapping[str, Any] | None,
+                            config: Mapping[str, Any]) -> dict[str, Any]:
     thresholds = config.get("thresholds", {})
     n_bins = int(config.get("number_of_phase_bins", 64))
     n_sections = int(config.get("number_of_time_sections", 4))
@@ -1062,7 +1066,7 @@ def extract_source_features(source: Mapping[str, Any], period_record: Optional[M
         frame, period, origin, dip_phase,
         _utils.finite_float(shape.get("dip_duty_cycle"), 0.1))
 
-    diagnostic: List[str] = []
+    diagnostic: list[str] = []
     if "alias" in lowered:
         diagnostic.append("alias_corrected" if "correct" in lowered else "alias_possible")
     if "harmonic" in lowered or (np.isfinite(half_distance) and half_distance < 0.15):
@@ -1072,7 +1076,7 @@ def extract_source_features(source: Mapping[str, Any], period_record: Optional[M
     if not np.isfinite(period) or any(w in lowered for w in ("weak", "ambiguous", "uncertain")):
         diagnostic.append("period_weak_or_ambiguous")
 
-    summary: Dict[str, Any] = {
+    summary: dict[str, Any] = {
         "source_key": source["source_key"], "source_id": source["source_id"],
         "dataset": source["dataset"], "input_filename": source.get("input_filename", ""),
         "file_fingerprint": source.get("file_fingerprint", ""),
@@ -1182,7 +1186,7 @@ def extract_source_features(source: Mapping[str, Any], period_record: Optional[M
         [np.log10(1.0 + max(_utils.finite_float(consensus.get("amplitude"), 0.0), 0.0))],
         [summary.get(k, np.nan) for k in periodic_scalars],
     ])
-    periodic_names = (["aligned_phase_bin_%02d" % i for i in range(len(coarse))]
+    periodic_names = ([f'aligned_phase_bin_{int(i):02d}' for i in range(len(coarse))]
                       + ["log_amplitude"] + list(periodic_scalars))
 
     # ---- TRANSIENT / EVOLUTION FEATURE BLOCK ------------------------------
@@ -1223,8 +1227,8 @@ def extract_source_features(source: Mapping[str, Any], period_record: Optional[M
         [summary.get(k, np.nan) for k in transient_scalars],
     ])
     transient_names = (
-        ["section%d_relative_amplitude" % i for i in range(n_sections)]
-        + ["section%d_correlation" % i for i in range(n_sections)]
+        [f'section{int(i):d}_relative_amplitude' for i in range(n_sections)]
+        + [f'section{int(i):d}_correlation' for i in range(n_sections)]
         + ["section_level_drift", "log_amplitude", "log_baseline_days",
            "log_n_observations"]
         + list(transient_scalars))
@@ -1263,13 +1267,12 @@ def feature_config_hash(config: Mapping[str, Any]) -> str:
 
 
 def cache_path(version_dir: Path, source_key: str, cache_key: str) -> Path:
-    return Path(version_dir) / "cache" / ("%s_%s.joblib" % (_utils.safe_name(source_key, 40),
-                                                                    cache_key[:12]))
+    return Path(version_dir) / "cache" / (f"{_utils.safe_name(source_key, 40)}_{cache_key[:12]}.joblib")
 
 
-def _feature_worker(source: Mapping[str, Any], period_record: Optional[Mapping[str, Any]],
+def _feature_worker(source: Mapping[str, Any], period_record: Mapping[str, Any] | None,
                     config: Mapping[str, Any], path: str, force: bool
-                    ) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+                    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """Module-level so joblib pickles only ONE source per task, not the whole set.
 
     Only the compact summary and feature vectors travel back to the parent. A
@@ -1284,14 +1287,16 @@ def _feature_worker(source: Mapping[str, Any], period_record: Optional[Mapping[s
             light = joblib.load(light_cache)
             light["cache_path"] = str(cache)
             return light, None
-        except Exception:
+        except Exception as _caught_error:
+            _execution.report_exception(_caught_error, __name__)
             pass
     try:
         record = extract_source_features(source, period_record, config)
     except Exception as error:
+        _execution.report_exception(error, __name__)
         return None, {"source_id": source.get("source_id", ""),
                       "dataset": source.get("dataset", ""),
-                      "reason": "feature_extraction_failed: %s" % error,
+                      "reason": f"feature_extraction_failed: {error}",
                       "traceback": traceback.format_exc(limit=3)}
     light = {
         "summary": record["summary"],
@@ -1312,7 +1317,8 @@ def _feature_worker(source: Mapping[str, Any], period_record: Optional[Mapping[s
             joblib.dump(record, cache, compress=3)
         joblib.dump({k: light[k] for k in light if k != "cache_path"},
                     light_cache, compress=3)
-    except Exception:
+    except Exception as _caught_error:
+        _execution.report_exception(_caught_error, __name__)
         pass
     return light, None
 
@@ -1320,7 +1326,7 @@ def _feature_worker(source: Mapping[str, Any], period_record: Optional[Mapping[s
 def extract_all_features(sources: Mapping[str, Mapping[str, Any]],
                          periods: Mapping[str, Mapping[str, Any]],
                          config: Mapping[str, Any], version_dir: Path,
-                         logger: logging.Logger) -> Tuple[List[Dict[str, Any]], pd.DataFrame]:
+                         logger: logging.Logger) -> tuple[list[dict[str, Any]], pd.DataFrame]:
     cache_key = feature_config_hash(config)
     force = bool(config.get("force_recompute_features", False))
     n_jobs = int(config.get("n_jobs", -1))

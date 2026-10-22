@@ -1,21 +1,22 @@
 from __future__ import annotations
+
 import tempfile
 import warnings
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
+
 import joblib
 import numpy as np
 import pandas as pd
-from . import settings as S
+
+from .. import execution as _execution
 from . import classify as _classify
 from . import embedding as _embedding
 from . import features as _features
 from . import modes as _modes
 from . import persistence as _persistence
+from . import settings as S
 from . import utils as _utils
-
-
-
 
 # ===========================================================================
 # SMOKE TEST
@@ -73,7 +74,7 @@ def synthetic_lightcurve(kind: str, period: float, seed: int) -> pd.DataFrame:
         # Couple phase and season by retaining only a broad phase interval in
         # each chronological quarter.
         keep = np.array([_features._circular_phase_distance(np.asarray([p]), 0.2 * s)[0] < 0.20
-                         for p, s in zip(phase, section)])
+                         for p, s in zip(phase, section, strict=False)])
         t, m, err, phase = t[keep], m[keep], err[keep], phase[keep]
         n = len(t)
     elif kind == "single_section_dimming":
@@ -136,10 +137,10 @@ def smoke_test(verbose: bool = False) -> int:
     ]
     metadata = {"evolution_threshold": 1.5}
     failures = 0
-    records: List[Dict[str, Any]] = []
-    results: List[Dict[str, Any]] = []
-    print("%-30s %-23s %-23s %s" % ("case", "expected", "got", "why"))
-    print("-" * 125)
+    records: list[dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
+    _execution.log_info(__name__, '{!s} {!s} {!s} {!s}'.format("case", "expected", "got", "why"))
+    _execution.log_info(__name__, "-" * 125)
     for index, (kind, period, expected, required_tags, expected_interest) in enumerate(cases):
         frame = synthetic_lightcurve(kind, period, seed=index)
         source = {"source_key": kind, "source_id": kind, "dataset": "smoke",
@@ -161,12 +162,10 @@ def smoke_test(verbose: bool = False) -> int:
         ok = got in expected and tag_ok and interest_ok
         if not ok:
             failures += 1
-        print("%-30s %-23s %-23s %s" % (
-            kind, "/".join(sorted(expected)), ("OK  " if ok else "FAIL") + " " + got,
-            result["rule_fired"][:55]))
+        _execution.log_info(__name__, '{!s} {!s} {!s} {!s}'.format(kind, "/".join(sorted(expected)), ("OK  " if ok else "FAIL") + " " + got, result["rule_fired"][:55]))
 
     # Methodological regression checks.
-    checks: List[Tuple[str, bool]] = []
+    checks: list[tuple[str, bool]] = []
     checks.append(("both filters enabled by default", config["use_c_band"] and config["use_o_band"]))
     weighted_config = dict(config)
     weighted_config["feature_weights"] = dict(S.DEFAULT_FEATURE_WEIGHTS)
@@ -187,14 +186,15 @@ def smoke_test(verbose: bool = False) -> int:
         checks.append(("all accepted sources remain in UMAP", len(models["embedding"]) == len(records)))
         checks.append(("saved-model transform returns every future source", transformed.shape == (3, 2)))
     except Exception as error:
+        _execution.report_exception(error, __name__)
         logger.error("Representation smoke check failed: %s", error)
         checks.extend([("all accepted sources remain in UMAP", False),
                        ("saved-model transform returns every future source", False)])
     labels = [r["suggested_primary_tag"] for r in results]
     checks.append(("nonvar/noisy are neither balanced nor removed",
                    len(labels) == len(cases) and "nonvar" in labels and "noisy" in labels))
-    result_by_case = {case[0]: result for case, result in zip(cases, results)}
-    record_by_case = {case[0]: record for case, record in zip(cases, records)}
+    result_by_case = {case[0]: result for case, result in zip(cases, results, strict=False)}
+    record_by_case = {case[0]: record for case, record in zip(cases, records, strict=False)}
     isolated_summary = record_by_case["random_isolated_outliers"]["summary"]
     grouped_record = record_by_case["grouped_raw_time_flares"]
     checks.append(("isolated excursions cannot create the flare family",
@@ -274,7 +274,7 @@ def smoke_test(verbose: bool = False) -> int:
                                        "allow_plot_copy_fallback": False,
                                        "generate_missing_source_plots": True})
             integration_table = _classify.assemble_table(records, integration_config, metadata)
-            fitted: Dict[str, Dict[str, Any]] = {}
+            fitted: dict[str, dict[str, Any]] = {}
             for block, prefix in (("periodic", "periodic_umap"),
                                   ("transient", "transient_umap")):
                 block_matrix, block_names = _embedding.feature_matrix(records, block)
@@ -282,8 +282,8 @@ def smoke_test(verbose: bool = False) -> int:
                     block_matrix, integration_config, logger, names=block_names,
                     block=block)
                 fitted[block]["ood"] = _embedding.fit_ood_model(fitted[block]["model_space"], integration_config)
-                integration_table["%s_1" % prefix] = fitted[block]["embedding"][:, 0]
-                integration_table["%s_2" % prefix] = fitted[block]["embedding"][:, 1]
+                integration_table[f"{prefix}_1"] = fitted[block]["embedding"][:, 0]
+                integration_table[f"{prefix}_2"] = fitted[block]["embedding"][:, 1]
                 if block == "periodic":
                     integration_table["out_of_distribution_score"] = _embedding.ood_scores(
                         fitted[block]["ood"], fitted[block]["model_space"])
@@ -337,7 +337,7 @@ def smoke_test(verbose: bool = False) -> int:
             integration_table["is_latest_batch"] = True
             integration_table["first_seen"] = _utils.iso_now()
             for index, record in enumerate(records):
-                cache_file = version_dir / "cache" / ("integration_%02d.joblib" % index)
+                cache_file = version_dir / "cache" / (f'integration_{int(index):02d}.joblib')
                 joblib.dump(record, cache_file, compress=1)
                 record["cache_path"] = str(cache_file)
             validation_keys = integration_table["source_key"].astype(str).tolist()
@@ -384,13 +384,14 @@ def smoke_test(verbose: bool = False) -> int:
                 and not (_persistence.figure_directory(version_dir) / "review_folders").exists()
                 and not (_persistence.figure_directory(version_dir) / "maps" / "family_centroids.png").exists()))
     except Exception as error:
+        _execution.report_exception(error, __name__)
         logger.error("End-to-end smoke check failed: %s", error, exc_info=verbose)
         checks.append(("end-to-end outputs and saved models", False))
     for name, ok in checks:
         if not ok:
             failures += 1
-        print("%-54s %s" % (name, "OK" if ok else "FAIL"))
-    print("-" * 125)
+        _execution.log_info(__name__, '{!s} {!s}'.format(name, "OK" if ok else "FAIL"))
+    _execution.log_info(__name__, "-" * 125)
     total = len(cases) + len(checks)
-    print("%d/%d passed" % (total - failures, total))
+    _execution.log_info(__name__, f'{int(total - failures):d}/{int(total):d} passed')
     return 1 if failures else 0

@@ -1,22 +1,25 @@
 from __future__ import annotations
+
 from typing import Any
+
 import numpy as np
 import pandas as pd
-from . import settings as S
+
 from . import aliases as _aliases
 from . import classify as _classify
 from . import folding as _folding
 from . import loading as _loading
 from . import periodograms as _periodograms
+from . import settings as S
 from . import validation as _validation
-
-
 
 
 # =============================================================================
 # ONE SERIES ANALYSIS WITHOUT FIELD ALIAS MEMORY
 # =============================================================================
-def analyse_one_series(metadata: dict[str, Any], prepared: dict[str, Any], catalogue_period: float) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any] | None]:
+def analyse_one_series(
+    metadata: dict[str, Any], prepared: dict[str, Any], catalogue_period: float
+) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any] | None]:
     n_points = int(prepared["n_points"])
     baseline = float(prepared["baseline_days"])
     base = {
@@ -34,19 +37,33 @@ def analyse_one_series(metadata: dict[str, Any], prepared: dict[str, Any], catal
     if n_points < S.MIN_POINTS:
         return {**base, "status": "skipped", "skip_reason": f"fewer than {S.MIN_POINTS} usable points"}, [], None
     if not np.isfinite(baseline) or baseline < S.MIN_BASELINE_DAYS:
-        return {**base, "status": "skipped", "skip_reason": f"baseline shorter than {S.MIN_BASELINE_DAYS:g} days"}, [], None
+        return (
+            {**base, "status": "skipped", "skip_reason": f"baseline shorter than {S.MIN_BASELINE_DAYS:g} days"},
+            [],
+            None,
+        )
     pmin, pmax = _periodograms.effective_period_range(baseline)
     if pmax <= pmin * 1.05:
-        return {**base, "status": "skipped", "skip_reason": "period range unsupported", "search_min_period_days": pmin, "search_max_period_days": pmax}, [], None
+        return (
+            {
+                **base,
+                "status": "skipped",
+                "skip_reason": "period range unsupported",
+                "search_min_period_days": pmin,
+                "search_max_period_days": pmax,
+            },
+            [],
+            None,
+        )
 
     result = _periodograms.run_lomb_scargle(prepared["time"], prepared["signal"], prepared["error"], pmin, pmax)
     raw_period = float(result["raw_best_period"])
     raw_peak_snr = _periodograms.periodogram_peak_snr(result["power"], result["raw_best_power"])
-    raw_fold = _folding.fold_coherence_metrics(
-        prepared["time"], prepared["signal"], prepared["error"], raw_period
-    )
+    raw_fold = _folding.fold_coherence_metrics(prepared["time"], prepared["signal"], prepared["error"], raw_period)
     peak_metrics = _folding.peak_strength_metrics(result["peaks"])
-    raw_window_power = _periodograms.spectral_window_power(prepared["time"], 1.0 / raw_period) if raw_period > 0 else np.nan
+    raw_window_power = (
+        _periodograms.spectral_window_power(prepared["time"], 1.0 / raw_period) if raw_period > 0 else np.nan
+    )
     mh_test = _periodograms.multiharmonic_2p_test(
         prepared["time"], prepared["signal"], prepared["error"], raw_period, baseline
     )
@@ -55,7 +72,7 @@ def analyse_one_series(metadata: dict[str, Any], prepared: dict[str, Any], catal
 
     peak_rows: list[dict[str, Any]] = []
     best_period = result["peaks"][0][0] if result["peaks"] else np.nan
-    for rank, (period, power, idx) in enumerate(result["peaks"], start=1):
+    for rank, (period, power, _idx) in enumerate(result["peaks"], start=1):
         peak_rows.append(
             {
                 **metadata,
@@ -85,7 +102,9 @@ def analyse_one_series(metadata: dict[str, Any], prepared: dict[str, Any], catal
                 topn_period = float(row["period_days"])
                 break
 
-    bls = _periodograms.run_bls(prepared["time"], prepared["signal"], prepared["error"], prepared["signal_type"], baseline)
+    bls = _periodograms.run_bls(
+        prepared["time"], prepared["signal"], prepared["error"], prepared["signal_type"], baseline
+    )
 
     two_p = _folding.odd_even_2p_test(prepared["time"], prepared["signal"], prepared["error"], raw_period)
 
@@ -106,18 +125,26 @@ def analyse_one_series(metadata: dict[str, Any], prepared: dict[str, Any], catal
         "raw_fold_amp_snr": raw_fold["fold_amp_snr"],
         "raw_fold_scatter_reduction": raw_fold["fold_scatter_reduction"],
         **mh_test,
-        "raw_period_significant": bool(_classify.series_is_significant({
-            "raw_ls_fap": _loading.safe_float(result["raw_best_fap"]),
-            "ls_peak_snr": raw_peak_snr,
-            "raw_fold_amp_snr": raw_fold["fold_amp_snr"],
-            **peak_metrics,
-        })),
-        "raw_period_likely_nonvar": bool(_classify.series_is_likely_nonvar({
-            "raw_ls_fap": _loading.safe_float(result["raw_best_fap"]),
-            "ls_peak_snr": raw_peak_snr,
-            "raw_fold_amp_snr": raw_fold["fold_amp_snr"],
-            **peak_metrics,
-        })),
+        "raw_period_significant": bool(
+            _classify.series_is_significant(
+                {
+                    "raw_ls_fap": _loading.safe_float(result["raw_best_fap"]),
+                    "ls_peak_snr": raw_peak_snr,
+                    "raw_fold_amp_snr": raw_fold["fold_amp_snr"],
+                    **peak_metrics,
+                }
+            )
+        ),
+        "raw_period_likely_nonvar": bool(
+            _classify.series_is_likely_nonvar(
+                {
+                    "raw_ls_fap": _loading.safe_float(result["raw_best_fap"]),
+                    "ls_peak_snr": raw_peak_snr,
+                    "raw_fold_amp_snr": raw_fold["fold_amp_snr"],
+                    **peak_metrics,
+                }
+            )
+        ),
         "ls_top_periods_days": top_periods,
         "ls_top_powers": top_powers,
         "raw_catalogue_match": _validation.catalogue_match(raw_period, catalogue_period),
@@ -138,6 +165,7 @@ def analyse_one_series(metadata: dict[str, Any], prepared: dict[str, Any], catal
         "series_confidence_class": "pending",
     }
     return row, peak_rows, {"prepared": prepared, "result": result, "bls": bls}
+
 
 # =============================================================================
 # SOURCE-LEVEL RECOMMENDATION
@@ -273,6 +301,7 @@ def choose_source_recommendations(summary_rows: list[dict[str, Any]]) -> pd.Data
 
         # Choose the strongest supported photometric period.  o/c agreement is
         # preferred, but a clean o-only or c-only signal is retained.
+        single_filter_warning_flag = ""
         period_source = "none"
         photometric_period = np.nan
         if xf_status == "agree" and np.isfinite(xf_anchor) and (sig_o or sig_c):
@@ -280,16 +309,37 @@ def choose_source_recommendations(summary_rows: list[dict[str, Any]]) -> pd.Data
             period_source = "o_c_consensus"
         else:
             candidates = [("combined", combined, p_comb), ("o", o, p_o), ("c", c, p_c)]
-            scored = [(series_score(r), name, r, pp) for name, r, pp in candidates if r is not None and np.isfinite(pp) and pp > 0]
+            scored = [
+                (series_score(r), name, r, pp)
+                for name, r, pp in candidates
+                if r is not None and np.isfinite(pp) and pp > 0
+            ]
             scored.sort(reverse=True, key=lambda x: x[0])
             if scored:
                 _, period_source, _, photometric_period = scored[0]
-                if period_source in {"o", "c"} and not is_sig(scored[0][2]):
-                    period_source += "_low_support"
-                elif period_source in {"o", "c"}:
-                    period_source += "_single_filter"
+                if period_source in {"o", "c"}:
+                    selected_row = scored[0][2]
+                    fold_snr = _loading.safe_float(selected_row.get("raw_fold_amp_snr"), np.nan)
+                    peak_snr = _loading.safe_float(selected_row.get("ls_peak_snr"), np.nan)
+                    supported = (
+                        np.isfinite(fold_snr)
+                        and np.isfinite(peak_snr)
+                        and fold_snr >= S.SINGLE_FILTER_MIN_FOLD_SNR
+                        and peak_snr >= S.SINGLE_FILTER_MIN_PEAK_SNR
+                    )
+                    if not S.ALLOW_SINGLE_FILTER_RECOMMENDATION:
+                        single_filter_warning_flag = "single_filter_recommendation_disabled"
+                    elif not supported:
+                        single_filter_warning_flag = "single_filter_below_snr_thresholds"
+                    low_support = bool(single_filter_warning_flag or not is_sig(selected_row))
+                    period_source += "_low_support" if low_support else "_single_filter"
 
-        if xf_status == "agree" and np.isfinite(xf_anchor) and np.isfinite(p_comb) and not _aliases.harmonic_relation(p_comb, xf_anchor):
+        if (
+            xf_status == "agree"
+            and np.isfinite(xf_anchor)
+            and np.isfinite(p_comb)
+            and not _aliases.harmonic_relation(p_comb, xf_anchor)
+        ):
             photometric_period = xf_anchor
             period_source = "o_c_consensus_over_combined"
 
@@ -308,14 +358,18 @@ def choose_source_recommendations(summary_rows: list[dict[str, Any]]) -> pd.Data
             test_row = combined if combined is not None else (o if o is not None else c)
 
         two_p_period = _loading.safe_float(test_row.get("tested_2p_days"), np.nan) if test_row is not None else np.nan
-        if np.isfinite(photometric_period):
-            if not np.isfinite(two_p_period) or abs(two_p_period - 2 * photometric_period) / (2 * photometric_period) > 0.05:
-                two_p_period = 2 * photometric_period
+        if np.isfinite(photometric_period) and (
+            not np.isfinite(two_p_period)
+            or abs(two_p_period - 2 * photometric_period) / (2 * photometric_period) > 0.05
+        ):
+            two_p_period = 2 * photometric_period
 
         odd_even_2p = bool(test_row.get("two_p_supported", False)) if test_row is not None else False
         mh_2p = bool(test_row.get("mh_2p_supported", False)) if test_row is not None else False
         top_peak_2p_present = any(bool(r.get("top_peak_2p_present", False)) for r in source_rows if r is not None)
-        validation_catalogue_is_2p = any(bool(r.get("validation_catalogue_is_2p_of_series", False)) for r in source_rows if r is not None)
+        validation_catalogue_is_2p = any(
+            bool(r.get("validation_catalogue_is_2p_of_series", False)) for r in source_rows if r is not None
+        )
         harmonic_review_needed = bool(odd_even_2p or mh_2p or top_peak_2p_present or validation_catalogue_is_2p)
 
         # Only choose 2P as the final blind period when the light curve itself
@@ -352,6 +406,8 @@ def choose_source_recommendations(summary_rows: list[dict[str, Any]]) -> pd.Data
         bls_support_status, bls_support_detail = bls_relation_to_period(source_rows, final_period)
 
         warning_flags: list[str] = []
+        if single_filter_warning_flag:
+            warning_flags.append(single_filter_warning_flag)
         if alias_like_rows:
             warning_flags.append("alias_warning")
         if correction_rows:
@@ -373,7 +429,12 @@ def choose_source_recommendations(summary_rows: list[dict[str, Any]]) -> pd.Data
         elif not any_sig:
             detection_label = "weak_period"
             confidence = "weak_or_low_support_period"
-        elif xf_status == "agree" and correction_rows == 0 and alias_like_rows == 0 and not harmonic_status.startswith("2P_supported"):
+        elif (
+            xf_status == "agree"
+            and correction_rows == 0
+            and alias_like_rows == 0
+            and not harmonic_status.startswith("2P_supported")
+        ):
             detection_label = "strong_period"
             confidence = "secure_non_alias"
         elif harmonic_status.startswith("2P_supported"):
@@ -398,10 +459,16 @@ def choose_source_recommendations(summary_rows: list[dict[str, Any]]) -> pd.Data
             detection_label = "strong_period" if any_sig else "weak_period"
             confidence = "single_series_or_low_support"
 
+        if single_filter_warning_flag and any_sig:
+            detection_label = "weak_period"
+            confidence = single_filter_warning_flag
+
         alias_text = ";".join(alias_flags)
         per_series_classes: dict[int, tuple[str, str]] = {}
         single_filter_warning = band_detection_status in {
-            "o_only_significant", "c_only_significant", "combined_only_significant"
+            "o_only_significant",
+            "c_only_significant",
+            "combined_only_significant",
         }
         for summary_index in group.index:
             primary, secondary = _classify.classify_series_detection(
@@ -415,23 +482,22 @@ def choose_source_recommendations(summary_rows: list[dict[str, Any]]) -> pd.Data
             summary_rows[int(summary_index)]["primary_classification"] = primary
             summary_rows[int(summary_index)]["secondary_classification"] = secondary
 
-        preferred_index = int(test_row.name) if test_row is not None and test_row.name in group.index else int(group.index[0])
+        preferred_index = (
+            int(test_row.name) if test_row is not None and test_row.name in group.index else int(group.index[0])
+        )
         source_primary_classification = per_series_classes[preferred_index][0]
         source_warning_set = {
-            tag
-            for _, secondary in per_series_classes.values()
-            for tag in secondary.split(";")
-            if tag != "none"
+            tag for _, secondary in per_series_classes.values() for tag in secondary.split(";") if tag != "none"
         }
-        source_secondary_tags = [
-            tag for tag in S.SECONDARY_WARNING_PRIORITY if tag in source_warning_set
-        ][:2]
+        source_secondary_tags = [tag for tag in S.SECONDARY_WARNING_PRIORITY if tag in source_warning_set][:2]
         source_secondary_classification = ";".join(source_secondary_tags) if source_secondary_tags else "none"
         recommendation_label = source_primary_classification
 
         notes: list[str] = []
         if band_detection_status == "o_only_significant":
-            notes.append("o-band-only detection: combined/c may dilute the signal; inspect forced c fold before physical interpretation")
+            notes.append(
+                "o-band-only detection: combined/c may dilute the signal; inspect forced c fold before physical interpretation"
+            )
         if band_detection_status == "c_only_significant":
             notes.append("c-band-only detection: inspect forced o fold and image/systematics")
         if alias_text:
@@ -454,7 +520,9 @@ def choose_source_recommendations(summary_rows: list[dict[str, Any]]) -> pd.Data
                 "cluster_name": first.get("cluster_name", ""),
                 "ra_deg": first.get("ra_deg", np.nan),
                 "dec_deg": first.get("dec_deg", np.nan),
-                "field_key": _aliases.field_key_text(_loading.safe_float(first.get("ra_deg"), np.nan), _loading.safe_float(first.get("dec_deg"), np.nan)),
+                "field_key": _aliases.field_key_text(
+                    _loading.safe_float(first.get("ra_deg"), np.nan), _loading.safe_float(first.get("dec_deg"), np.nan)
+                ),
                 "catalogue_period_days": cat,
                 "combined_period_days": p_comb,
                 "o_period_days": p_o,
@@ -476,9 +544,15 @@ def choose_source_recommendations(summary_rows: list[dict[str, Any]]) -> pd.Data
                 "odd_even_2p_supported": odd_even_2p,
                 "multiharmonic_2p_supported": mh_2p,
                 "top_peak_2p_present": top_peak_2p_present,
-                "top_peak_2p_period_days": _loading.safe_float(test_row.get("top_peak_2p_period_days"), np.nan) if test_row is not None else np.nan,
-                "top_peak_2p_rank": _loading.safe_float(test_row.get("top_peak_2p_rank"), np.nan) if test_row is not None else np.nan,
-                "top_peak_2p_power_fraction": _loading.safe_float(test_row.get("top_peak_2p_power_fraction"), np.nan) if test_row is not None else np.nan,
+                "top_peak_2p_period_days": _loading.safe_float(test_row.get("top_peak_2p_period_days"), np.nan)
+                if test_row is not None
+                else np.nan,
+                "top_peak_2p_rank": _loading.safe_float(test_row.get("top_peak_2p_rank"), np.nan)
+                if test_row is not None
+                else np.nan,
+                "top_peak_2p_power_fraction": _loading.safe_float(test_row.get("top_peak_2p_power_fraction"), np.nan)
+                if test_row is not None
+                else np.nan,
                 "validation_catalogue_is_2p": validation_catalogue_is_2p,
                 "harmonic_review_needed": harmonic_review_needed,
                 "recommended_period_days": final_period,
@@ -519,16 +593,23 @@ def add_forced_cross_filter_metrics(
         return recommendations
 
     payload_lookup: dict[tuple[str, str], dict[str, Any]] = {}
-    for metadata, prepared, row, payload, catalogue_period in plot_payloads:
+    for metadata, prepared, _row, _payload, _catalogue_period in plot_payloads:
         payload_lookup[(str(metadata.get("source_id")), str(prepared.get("series_name")))] = prepared
 
     rec = recommendations.copy()
     metric_cols = [
-        "o_forced_at_recommended_amp", "o_forced_at_recommended_snr", "o_forced_at_recommended_scatter_reduction",
-        "c_forced_at_recommended_amp", "c_forced_at_recommended_snr", "c_forced_at_recommended_scatter_reduction",
-        "c_forced_at_o_period_amp", "c_forced_at_o_period_snr",
-        "o_forced_at_c_period_amp", "o_forced_at_c_period_snr",
-        "o_over_c_forced_amp_ratio", "colour_recovery_status",
+        "o_forced_at_recommended_amp",
+        "o_forced_at_recommended_snr",
+        "o_forced_at_recommended_scatter_reduction",
+        "c_forced_at_recommended_amp",
+        "c_forced_at_recommended_snr",
+        "c_forced_at_recommended_scatter_reduction",
+        "c_forced_at_o_period_amp",
+        "c_forced_at_o_period_snr",
+        "o_forced_at_c_period_amp",
+        "o_forced_at_c_period_snr",
+        "o_over_c_forced_amp_ratio",
+        "colour_recovery_status",
     ]
     for col in metric_cols:
         if col not in rec.columns:
@@ -569,11 +650,24 @@ def add_forced_cross_filter_metrics(
 
         o_snr = _loading.safe_float(rec.at[idx, "o_forced_at_recommended_snr"], np.nan)
         c_snr = _loading.safe_float(rec.at[idx, "c_forced_at_recommended_snr"], np.nan)
-        if np.isfinite(o_snr) and o_snr >= S.FOLD_SNR_THRESHOLD and (not np.isfinite(c_snr) or c_snr < S.FOLD_SNR_THRESHOLD):
+        if (
+            np.isfinite(o_snr)
+            and o_snr >= S.FOLD_SNR_THRESHOLD
+            and (not np.isfinite(c_snr) or c_snr < S.FOLD_SNR_THRESHOLD)
+        ):
             status = "o_only_at_recommended_period"
-        elif np.isfinite(c_snr) and c_snr >= S.FOLD_SNR_THRESHOLD and (not np.isfinite(o_snr) or o_snr < S.FOLD_SNR_THRESHOLD):
+        elif (
+            np.isfinite(c_snr)
+            and c_snr >= S.FOLD_SNR_THRESHOLD
+            and (not np.isfinite(o_snr) or o_snr < S.FOLD_SNR_THRESHOLD)
+        ):
             status = "c_only_at_recommended_period"
-        elif np.isfinite(o_snr) and np.isfinite(c_snr) and o_snr >= S.FOLD_SNR_THRESHOLD and c_snr >= S.FOLD_SNR_THRESHOLD:
+        elif (
+            np.isfinite(o_snr)
+            and np.isfinite(c_snr)
+            and o_snr >= S.FOLD_SNR_THRESHOLD
+            and c_snr >= S.FOLD_SNR_THRESHOLD
+        ):
             status = "both_filters_show_forced_signal"
         else:
             status = "forced_fold_weak_or_unavailable"
@@ -582,9 +676,14 @@ def add_forced_cross_filter_metrics(
         # Make the note explicit, but do not change the period solely because of colour.
         old_note = str(rec.at[idx, "confidence_note"]) if "confidence_note" in rec.columns else ""
         if status == "o_only_at_recommended_period" and "o-only" not in old_note:
-            rec.at[idx, "confidence_note"] = (old_note + "; " if old_note else "") + "forced-fold check: signal is stronger in o than c; this may be S/N, colour dependence, dust/spot physics or contamination"
+            rec.at[idx, "confidence_note"] = (
+                (old_note + "; " if old_note else "")
+                + "forced-fold check: signal is stronger in o than c; this may be S/N, colour dependence, dust/spot physics or contamination"
+            )
         elif status == "both_filters_show_forced_signal" and "forced-fold check" not in old_note:
-            rec.at[idx, "confidence_note"] = (old_note + "; " if old_note else "") + "forced-fold check: both filters support the recommended period"
+            rec.at[idx, "confidence_note"] = (
+                old_note + "; " if old_note else ""
+            ) + "forced-fold check: both filters support the recommended period"
 
     return rec
 
@@ -621,10 +720,7 @@ def source_consensus_table(
 
     recommendation_lookup: dict[str, dict[str, Any]] = {}
     if recommendations is not None and not recommendations.empty:
-        recommendation_lookup = {
-            str(row.get("source_id")): row.to_dict()
-            for _, row in recommendations.iterrows()
-        }
+        recommendation_lookup = {str(row.get("source_id")): row.to_dict() for _, row in recommendations.iterrows()}
 
     output_rows: list[dict[str, Any]] = []
     for source_id, group in ok.groupby("source_id", dropna=False):

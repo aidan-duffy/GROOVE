@@ -1,20 +1,27 @@
 """Download one target at a time, checkpointing every remote job before polling."""
 from __future__ import annotations
+
 import argparse
-from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import os
-from pathlib import Path
 import re
-from typing import Optional, Sequence
+from collections.abc import Sequence
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from pathlib import Path
+
 import pandas as pd
-from . import settings as S, client as api, storage, targets as target_io
+
+from .. import execution as _execution
+from . import client as api
+from . import settings as S
+from . import storage
+from . import targets as target_io
 
 
 def print_safe(*parts):
-    print(*parts, flush=True)
+    _execution.log_info(__name__, *parts, flush=True)
 
 
 def utc_now_iso():
@@ -54,7 +61,7 @@ def token_lock(token):
                 fcntl.flock(handle, fcntl.LOCK_UN)
 
 
-def parse_args(argv: Optional[Sequence[str]] = None):
+def parse_args(argv: Sequence[str] | None = None):
     p = argparse.ArgumentParser(description="Serial ATLAS downloads using ATLAS_TOKEN.")
     for flag, default in (("input-csv", S.INPUT_CSV), ("outroot", S.OUTPUT_ROOT),
                           ("run-name", S.RUN_NAME), ("gaia-id", S.GAIA_ID_FILTER),
@@ -174,9 +181,9 @@ def download(args, frame, directory, token):
                         task_url, job_id = client.submit_job(float(row["ra"]), float(row["dec"]), cfg["mjd_min"], cfg["mjd_max"], args.mode)
                         save(row, status="submitted", task_url=task_url, active_job_id=job_id)
                     print_safe(f"[{index}/{len(keys)}] {label}: polling saved task")
-                    def callback(state, task):
-                        save(row, status="running" if state == "completed" else state,
-                             result_url=api.extract_result_url(task) or row.get("result_url", ""))
+                    def callback(state, task, current_row=row):
+                        save(current_row, status="running" if state == "completed" else state,
+                             result_url=api.extract_result_url(task) or current_row.get("result_url", ""))
                     task = client.poll_job(task_url, callback)
                     result_url = api.extract_result_url(task)
                     if not result_url:
@@ -206,7 +213,7 @@ def download(args, frame, directory, token):
     return 0 if all(rows[k]["status"] in ("completed", "no_data") for k in keys) else 1
 
 
-def main(argv: Optional[Sequence[str]] = None):
+def main(argv: Sequence[str] | None = None):
     args = parse_args(argv)
     frame, columns, selection = target_io.prepare_targets(args)
     directory = Path(args.outroot).expanduser().resolve() / storage.safe_component(args.run_name, 80)

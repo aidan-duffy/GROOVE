@@ -1,15 +1,26 @@
 """Alias learning must work without combined photometry and count stars once."""
+
 import pandas as pd
 import pytest
-from groove.periods import aliases, settings as S
+
+from groove.periods import aliases
+from groove.periods import settings as S
 
 
 def rows(n=8, bands=("o", "c"), period=7.321):
-    return pd.DataFrame([
-        {"source_id": str(3216489845356186500 + i), "series": band,
-         "ra_deg": 12.0, "dec_deg": 22.0, "ls_top_periods_days": str(period)}
-        for i in range(n) for band in bands
-    ])
+    return pd.DataFrame(
+        [
+            {
+                "source_id": str(9900000000000000004 + i),
+                "series": band,
+                "ra_deg": 12.0,
+                "dec_deg": 22.0,
+                "ls_top_periods_days": str(period),
+            }
+            for i in range(n)
+            for band in bands
+        ]
+    )
 
 
 def counts(inventory):
@@ -33,8 +44,10 @@ def test_band_rows_cannot_satisfy_minimum_star_count():
 @pytest.mark.parametrize("band", ["o", "c"])
 def test_auto_single_band_matches_explicit(band):
     data = rows(bands=(band,))
-    pd.testing.assert_frame_equal(counts(aliases.build_field_alias_inventory(data, "auto")),
-                                  counts(aliases.build_field_alias_inventory(data, band)))
+    pd.testing.assert_frame_equal(
+        counts(aliases.build_field_alias_inventory(data, "auto")),
+        counts(aliases.build_field_alias_inventory(data, band)),
+    )
 
 
 def test_auto_pools_both_bands_without_inflating_hits():
@@ -49,8 +62,10 @@ def test_auto_pools_both_bands_without_inflating_hits():
 def test_combined_references_take_precedence_and_match_legacy():
     reference = rows(bands=("combined",), period=11.731)
     mixed = pd.concat([rows(), reference], ignore_index=True)
-    pd.testing.assert_frame_equal(counts(aliases.build_field_alias_inventory(mixed, "auto")),
-                                  counts(aliases.build_field_alias_inventory(reference, "combined")))
+    pd.testing.assert_frame_equal(
+        counts(aliases.build_field_alias_inventory(mixed, "auto")),
+        counts(aliases.build_field_alias_inventory(reference, "combined")),
+    )
 
 
 def test_duplicate_reference_rows_do_not_count_twice():
@@ -63,9 +78,10 @@ def test_universal_aliases_still_excluded():
     assert aliases.build_field_alias_inventory(rows(period=1.0), "auto").empty
 
 
-def test_explicit_missing_band_warns(capsys):
+def test_explicit_missing_band_warns(caplog):
+    caplog.set_level("INFO", logger="groove")
     assert aliases.build_field_alias_inventory(rows(), "combined").empty
-    assert "No combined rows" in capsys.readouterr().out
+    assert "No combined rows" in caplog.text
 
 
 def test_invalid_series_rejected():
@@ -80,4 +96,4 @@ def test_reference_source_ids_are_preserved(tmp_path, monkeypatch):
     data.to_csv(reference, index=False)
     monkeypatch.setattr(S, "REFERENCE_SUMMARY_CSVS", [reference])
     loaded = aliases.load_reference_summaries()
-    assert loaded.source_id.iloc[1] == "3216489845356186501"
+    assert loaded.source_id.iloc[1] == "9900000000000000005"

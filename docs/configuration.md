@@ -114,3 +114,36 @@ controls.
 Cleaning supports independent `save_png` and `save_pdf` settings. Output-format
 options differ by stage; there is no universal format switch. See the stage
 settings linked above for supported plotting options.
+
+
+## Execution and diagnostic controls
+
+- `groove periods -c run.yaml --n-jobs 2` runs period calculations in two
+  processes. The same flag on `groove run` controls its period stage only.
+  The YAML equivalent is `periods: {period_n_jobs: 2}`. Default: `1`; `0` is
+  invalid; negative values follow joblib conventions (`-1` uses available CPUs).
+- Fewer than eight unfinished files use the serial path. With a worker count
+  other than `1`, `keep_plot_payloads_in_memory` is ignored and plots use the
+  streaming pass. Checkpoints, source limits, tables and plots remain parent-owned.
+- Resume with the same command and configuration. Source journals are merged in
+  input order; completed sources survive interrupted workers or plotting.
+- `--strict` is available on every stage and full run. Every broad stage exception
+  records its type and message; strict mode re-raises instead of taking a fallback.
+  It also applies to diagnostic fallbacks. It does not re-run completed receipts;
+  combine with `--rerun` when intentional recalculation is needed.
+- Embedded callers can configure the `groove` logging hierarchy and use
+  `groove.execution.error_policy(True)` as a scoped fail-fast context. The CLI
+  installs its console handler; informational stage output uses logging.
+- Single-filter supported provenance requires
+  `single_filter_min_fold_snr: 3.0` and `single_filter_min_peak_snr: 4.0` by default,
+  with `allow_single_filter_recommendation: true`. These are raw-series SNR
+  diagnostics, not a new significance estimate for an alias-corrected candidate.
+  Candidates below either threshold are retained as low-support periods with
+  `single_filter_below_snr_thresholds`; disabling single-filter support retains
+  the candidate with `single_filter_recommendation_disabled`.
+- Alias weights `alias_weight_universal: 0.50`, `alias_weight_field: 0.50`, and
+  `alias_weight_window: 0.35` now govern both diagnostic and adoption scoring.
+  Only rank one has a stored sampling-window value in the adoption pass;
+  other ranks retain universal/field scoring without a time-array window value.
+
+The complete 1.1.0 change and verification record is [CHANGES_APPLIED.md](../CHANGES_APPLIED.md).

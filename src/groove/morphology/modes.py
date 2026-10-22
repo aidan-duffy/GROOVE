@@ -1,17 +1,22 @@
 from __future__ import annotations
+
 import argparse
 import json
 import logging
 import math
 import os
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
+
 import joblib
 import numpy as np
 import pandas as pd
 from sklearn.cluster import DBSCAN
 from sklearn.neighbors import NearestNeighbors
-from . import settings as S
+
+from .. import execution as _execution
+from .. import resume as R
 from . import classify as _classify
 from . import embedding as _embedding
 from . import features as _features
@@ -19,19 +24,17 @@ from . import loading as _loading
 from . import outputs as _outputs
 from . import persistence as _persistence
 from . import plots as _plots
+from . import settings as S
 from . import utils as _utils
-from .. import resume as R
-
-
 
 
 def finalise(table: pd.DataFrame, version_dir: Path, config: Mapping[str, Any],
              specs: Sequence[Mapping[str, Any]], records: Sequence[Mapping[str, Any]],
-             extra: Dict[str, pd.DataFrame], outline_new: bool,
+             extra: dict[str, pd.DataFrame], outline_new: bool,
              logger: logging.Logger,
-             combined_space: Optional[np.ndarray] = None,
-             combined_keys: Optional[Sequence[str]] = None,
-             sources: Optional[Mapping[str, Mapping[str, Any]]] = None) -> None:
+             combined_space: np.ndarray | None = None,
+             combined_keys: Sequence[str] | None = None,
+             sources: Mapping[str, Mapping[str, Any]] | None = None) -> None:
     """Shared output stage: plots, maps, folders, appendix, tables."""
     colours = dict(S.CATEGORY_COLOURS)
     colours.update(config.get("category_colours", {}) or {})
@@ -73,7 +76,7 @@ def finalise(table: pd.DataFrame, version_dir: Path, config: Mapping[str, Any],
     # to the period-search pipeline and are intentionally never embedded here.
     output_config = dict(config)
     output_config["_phase_fold_products_only"] = True
-    plot_sources: Dict[str, Mapping[str, Any]] = dict(sources or {})
+    plot_sources: dict[str, Mapping[str, Any]] = dict(sources or {})
     # Synthetic/integration callers may supply full records rather than the
     # production raw-source mapping.  Compact feature records do not enter this
     # fallback because they intentionally omit the observations.
@@ -111,7 +114,7 @@ def finalise(table: pd.DataFrame, version_dir: Path, config: Mapping[str, Any],
     logger.info("Morphology plots: %s", _persistence.figure_directory(version_dir))
 
 
-def fit_or_refit(config: Dict[str, Any], args: argparse.Namespace, mode: str) -> Dict[str, Any]:
+def fit_or_refit(config: dict[str, Any], args: argparse.Namespace, mode: str) -> dict[str, Any]:
     output_root = Path(config["output_root"])
     version = config.get("model_version") or ""
     version_dir = _persistence.version_directory(output_root, version)
@@ -120,9 +123,9 @@ def fit_or_refit(config: Dict[str, Any], args: argparse.Namespace, mode: str) ->
             and not (bool(config.get("resume_finalisation", True))
                      and _persistence.finalisation_checkpoint_path(version_dir).exists())):
         raise SystemExit(
-            "A completed model already exists at %s.\n"
+            f"A completed model already exists at {version_dir}.\n"
             "Use --mode transform to add data to it, --overwrite to rebuild it in place, "
-            "or --model-version NAME to build a separate one." % version_dir)
+            "or --model-version NAME to build a separate one.")
     _persistence.ensure_structure(version_dir)
     if config.get('force_recompute_features', False) and config.get('overwrite_existing_model', False):
         # An old completion marker must not obstruct resuming a new forced fit.
@@ -139,12 +142,12 @@ def fit_or_refit(config: Dict[str, Any], args: argparse.Namespace, mode: str) ->
         raise SystemExit("No datasets have process=True.")
     sources, load_problems = _loading.load_lightcurves(specs, config, logger)
     if len(sources) < 5:
-        raise SystemExit("Only %d usable sources; need at least 5 to fit a map." % len(sources))
+        raise SystemExit(f'Only {int(len(sources)):d} usable sources; need at least 5 to fit a map.')
     _outputs.mark_sources_with_existing_plots(sources, specs, logger)
     periods, conflicts = _loading.read_period_tables(specs, config, logger)
     records, failures = _features.extract_all_features(sources, periods, config, version_dir, logger)
     if len(records) < 5:
-        raise SystemExit("Only %d sources produced features." % len(records))
+        raise SystemExit(f'Only {int(len(records)):d} sources produced features.')
 
     checkpoint = _persistence.load_finalisation_checkpoint(
         version_dir, records, config, mode, logger)
@@ -184,7 +187,7 @@ def fit_or_refit(config: Dict[str, Any], args: argparse.Namespace, mode: str) ->
 
     table = _classify.assemble_table(records, config, {})
 
-    metadata: Dict[str, Any] = {
+    metadata: dict[str, Any] = {
         "model_version": version, "mode": mode, "created": _utils.iso_now(),
         "feature_config_hash": _features.feature_config_hash(config),
         "schema": S.FEATURE_SCHEMA_VERSION,
@@ -193,19 +196,19 @@ def fit_or_refit(config: Dict[str, Any], args: argparse.Namespace, mode: str) ->
         "fit_sample_policy": "all_accepted_sources_unbalanced",
     }
 
-    block_models: Dict[str, Any] = {}
+    block_models: dict[str, Any] = {}
     for block, prefix in (("periodic", "periodic_umap"), ("transient", "transient_umap")):
         matrix, names = _embedding.feature_matrix(records, block)
         models = _embedding.fit_representation(matrix, config, logger, names=names, block=block)
         block_models[block] = models
         models["ood"] = _embedding.fit_ood_model(models["model_space"], config)
-        table["%s_1" % prefix] = models["embedding"][:, 0]
-        table["%s_2" % prefix] = models["embedding"][:, 1]
+        table[f"{prefix}_1"] = models["embedding"][:, 0]
+        table[f"{prefix}_2"] = models["embedding"][:, 1]
         if block == "periodic":
             table["out_of_distribution_score"] = _embedding.ood_scores(models["ood"], models["model_space"])
         _persistence.save_models(version_dir, block, models)
-        metadata["%s_feature_names" % block] = names
-        metadata["%s_umap_settings" % block] = models["selected_settings"]
+        metadata[f"{block}_feature_names"] = names
+        metadata[f"{block}_umap_settings"] = models["selected_settings"]
 
     metadata["evolution_threshold"] = _embedding.calibrated_threshold(
         table["evolution_raw_score"], float(config.get("evolution_quantile", 0.95)))
@@ -277,7 +280,7 @@ def fit_or_refit(config: Dict[str, Any], args: argparse.Namespace, mode: str) ->
     _classify.ensure_manual_labels_file(manual_path)
     table = _classify.apply_labels(table, _classify.load_manual_labels(manual_path))
 
-    batch = config.get("batch_id") or ("reference_%s" % version)
+    batch = config.get("batch_id") or (f"reference_{version}")
     table["batch_id"] = batch
     table["is_reference"] = True
     table["is_latest_batch"] = True
@@ -319,11 +322,11 @@ def fit_or_refit(config: Dict[str, Any], args: argparse.Namespace, mode: str) ->
     return {"version_dir": str(version_dir), "n_sources": len(table)}
 
 
-def transform_mode(config: Dict[str, Any], args: argparse.Namespace) -> Dict[str, Any]:
+def transform_mode(config: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
     output_root = Path(config["output_root"])
     version, version_dir = _persistence.resolve_version_dir(output_root, config.get("model_version"))
     if not version_dir.exists():
-        raise SystemExit("Model version directory not found: %s" % version_dir)
+        raise SystemExit(f"Model version directory not found: {version_dir}")
     logger = _utils.setup_logging(version_dir, args.verbose)
     metadata = json.loads((version_dir / "models" / "model_metadata.json").read_text("utf-8"))
     if metadata.get("feature_config_hash") != _features.feature_config_hash(config):
@@ -351,7 +354,8 @@ def transform_mode(config: Dict[str, Any], args: argparse.Namespace) -> Dict[str
     if transform_checkpoint.is_file() and not config.get('force_recompute_features', False):
         try:
             saved = joblib.load(transform_checkpoint)
-        except Exception:
+        except Exception as _caught_error:
+            _execution.report_exception(_caught_error, __name__)
             saved = None
         if saved is not None:
             logger.info('Resuming saved transform output products')
@@ -380,15 +384,15 @@ def transform_mode(config: Dict[str, Any], args: argparse.Namespace) -> Dict[str
     records, failures = _features.extract_all_features(subset, periods, config, version_dir, logger)
     table = _classify.assemble_table(records, config, metadata)
 
-    new_combined_space: Optional[np.ndarray] = None
+    new_combined_space: np.ndarray | None = None
     for block, prefix in (("periodic", "periodic_umap"),
                           ("transient", "transient_umap"),
                           ("combined", "combined_umap")):
         matrix, _ = _embedding.feature_matrix(records, block)
         models = _persistence.load_models(version_dir, block)
         embedding, model_space = _embedding.transform_representation(models, matrix)
-        table["%s_1" % prefix] = embedding[:, 0]
-        table["%s_2" % prefix] = embedding[:, 1]
+        table[f"{prefix}_1"] = embedding[:, 0]
+        table[f"{prefix}_2"] = embedding[:, 1]
         if block == "periodic":
             table["out_of_distribution_score"] = _embedding.ood_scores(models["ood"], model_space)
         elif block == "combined":
@@ -409,16 +413,13 @@ def transform_mode(config: Dict[str, Any], args: argparse.Namespace) -> Dict[str
     manual_path = Path(config.get("manual_labels_file") or (output_root / "manual_labels.csv"))
     _classify.ensure_manual_labels_file(manual_path)
     table = _classify.apply_labels(table, _classify.load_manual_labels(manual_path))
-    batch = config.get("batch_id") or ("batch_%s" % _utils.stamp())
+    batch = config.get("batch_id") or (f"batch_{_utils.stamp()}")
     table["batch_id"] = batch
     table["is_reference"] = False
     table["is_latest_batch"] = True
     table["first_seen"] = _utils.iso_now()
 
-    if not old.empty:
-        combined = _embedding.merge_transformed_sources(old, table)
-    else:
-        combined = table
+    combined = _embedding.merge_transformed_sources(old, table) if not old.empty else table
 
     old_validation_keys, old_validation_space = _persistence.load_combined_validation_space(version_dir)
     if new_combined_space is None:
@@ -446,8 +447,8 @@ def transform_mode(config: Dict[str, Any], args: argparse.Namespace) -> Dict[str
     return {"version_dir": str(version_dir), "n_sources": len(table)}
 
 
-def relabel_or_plot(config: Dict[str, Any], args: argparse.Namespace,
-                    mode: str) -> Dict[str, Any]:
+def relabel_or_plot(config: dict[str, Any], args: argparse.Namespace,
+                    mode: str) -> dict[str, Any]:
     output_root = Path(config["output_root"])
     version, version_dir = _persistence.resolve_version_dir(output_root, config.get("model_version"))
     logger = _utils.setup_logging(version_dir, args.verbose)
@@ -490,7 +491,7 @@ def relabel_or_plot(config: Dict[str, Any], args: argparse.Namespace,
     return {"version_dir": str(version_dir), "n_sources": len(table)}
 
 
-def highlight_source_mode(config: Dict[str, Any], args: argparse.Namespace) -> Dict[str, Any]:
+def highlight_source_mode(config: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
     """Create source-highlight and neighbour products from a frozen model."""
     output_root = Path(config["output_root"])
     _, version_dir = _persistence.resolve_version_dir(output_root, config.get("model_version"))
@@ -504,14 +505,14 @@ def highlight_source_mode(config: Dict[str, Any], args: argparse.Namespace) -> D
     label = str(args.source_label or source_id)
     source = table.loc[table["source_id"].astype(str).map(_utils.clean_source_id).eq(source_id)]
     if source.empty:
-        raise SystemExit("Source %s is not present in the frozen catalogue." % source_id)
+        raise SystemExit(f"Source {source_id} is not present in the frozen catalogue.")
     map_name = str(args.map_name or "combined")
     x_col, y_col, title, original_base = S.ADDON_MAP_SPECS[map_name]
     colours = dict(S.CATEGORY_COLOURS)
     colours.update(config.get("category_colours", {}) or {})
-    addon_base = "%s_%s_highlighted" % (original_base, _utils.safe_name(label))
+    addon_base = f"{original_base}_{_utils.safe_name(label)}_highlighted"
     _plots.make_static_map(
-        table, x_col, y_col, "%s - %s highlighted" % (title, label),
+        table, x_col, y_col, f"{title} - {label} highlighted",
         addon_base, version_dir, colours, False, {source_id: label}, config.get("dataset_markers", {}))
 
     neighbour_count = max(1, min(int(args.nearest_neighbours or 8), 8))
@@ -519,7 +520,7 @@ def highlight_source_mode(config: Dict[str, Any], args: argparse.Namespace) -> D
         table, version_dir, source_id, neighbour_count)
     table_dir = version_dir / "tables" / "additions"
     table_dir.mkdir(parents=True, exist_ok=True)
-    neighbour_path = table_dir / ("%s_nearest_neighbours.csv" % _utils.safe_name(label))
+    neighbour_path = table_dir / (f"{_utils.safe_name(label)}_nearest_neighbours.csv")
     _utils.atomic_write_csv(neighbours, neighbour_path)
 
     panel_rows = table.set_index(table["source_key"].astype(str), drop=False).loc[panel_keys]
@@ -531,14 +532,13 @@ def highlight_source_mode(config: Dict[str, Any], args: argparse.Namespace) -> D
     addition_dir = _persistence.figure_directory(version_dir) / "maps" / "additions" / _utils.safe_name(label)
     _plots.make_neighbour_phase_grid(
         table, panel_keys, neighbours, records, version_dir,
-        addition_dir / ("%s_nearest_neighbours_9panel.png" % _utils.safe_name(label)),
+        addition_dir / (f"{_utils.safe_name(label)}_nearest_neighbours_9panel.png"),
         label, 1.0)
     if bool(args.diagnostic_folds):
         for factor, suffix in ((0.5, "half_period"), (2.0, "double_period")):
             _plots.make_neighbour_phase_grid(
                 table, panel_keys, neighbours, records, version_dir,
-                addition_dir / ("%s_nearest_neighbours_9panel_%s.png" % (
-                    _utils.safe_name(label), suffix)), label, factor)
+                addition_dir / (f"{_utils.safe_name(label)}_nearest_neighbours_9panel_{suffix}.png"), label, factor)
     logger.info("Frozen-map highlight written for %s; existing maps were not changed", label)
     return {
         "version_dir": str(version_dir),
@@ -548,7 +548,7 @@ def highlight_source_mode(config: Dict[str, Any], args: argparse.Namespace) -> D
     }
 
 
-def umap_families_mode(config: Dict[str, Any], args: argparse.Namespace) -> Dict[str, Any]:
+def umap_families_mode(config: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
     """Label only robustly detached 2-D islands; keep the main body unassigned."""
     output_root = Path(config["output_root"])
     _, version_dir = _persistence.resolve_version_dir(output_root, config.get("model_version"))
@@ -579,13 +579,13 @@ def umap_families_mode(config: Dict[str, Any], args: argparse.Namespace) -> Dict
     if not len(non_noise):
         raise SystemExit("No density components were found with the requested settings.")
     labels, sizes = np.unique(non_noise, return_counts=True)
-    size_by_label = {int(label): int(size) for label, size in zip(labels, sizes)}
+    size_by_label = {int(label): int(size) for label, size in zip(labels, sizes, strict=False)}
     main_label = max(size_by_label, key=size_by_label.get)
     selected_labels = [label for label, size in size_by_label.items()
                        if label != main_label and size >= minimum_family_size]
     selected_labels.sort(key=lambda label: tuple(np.mean(
         coordinates[raw_labels == label], axis=0)))
-    family_by_raw = {label: "detached_family_%02d" % (index + 1)
+    family_by_raw = {label: f'detached_family_{int(index + 1):02d}'
                      for index, label in enumerate(selected_labels)}
 
     membership = table[[
@@ -614,7 +614,7 @@ def umap_families_mode(config: Dict[str, Any], args: argparse.Namespace) -> Dict
     membership["detached_family_plot_link"] = ""
     membership["detached_family_plot_status"] = "not_in_retained_family"
 
-    summaries: List[Dict[str, Any]] = []
+    summaries: list[dict[str, Any]] = []
     for raw_label, family in family_by_raw.items():
         selected_local = raw_labels == raw_label
         selected_global = membership["umap_detached_family"].eq(family)
@@ -732,7 +732,7 @@ def umap_families_mode(config: Dict[str, Any], args: argparse.Namespace) -> Dict
     }
 
 
-def classify_only(config: Dict[str, Any], args: argparse.Namespace) -> Dict[str, Any]:
+def classify_only(config: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
     """Extract and classify any sample size without fitting an embedding."""
     directory = Path(config["output_root"]) / "classification"
     _persistence.ensure_structure(directory)

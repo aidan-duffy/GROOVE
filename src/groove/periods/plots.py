@@ -1,20 +1,22 @@
 from __future__ import annotations
-import math
+
 import gc
+import math
 from pathlib import Path
 from typing import Any
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from . import settings as S
+
+from .. import execution as _execution
 from . import aliases as _aliases
 from . import classify as _classify
 from . import files as _files
 from . import folding as _folding
 from . import loading as _loading
 from . import periodograms as _periodograms
-
-
+from . import settings as S
 
 
 def create_master_review_plot(recommendations: pd.DataFrame) -> str:
@@ -453,7 +455,7 @@ def plot_alias_candidate_folds(
 
     fig, axes = make_diagnostic_axes(len(candidates))
     candidate_periods: list[float] = []
-    for ax, candidate in zip(axes, candidates):
+    for ax, candidate in zip(axes, candidates, strict=False):
         period = _loading.safe_float(candidate.get("period_days"), np.nan)
         candidate_periods.append(period)
         plot_diagnostic_fold_axis(ax, prepared, period)
@@ -550,7 +552,7 @@ def plot_harmonic_candidate_folds(
     periods: list[float] = []
     search_min = _loading.safe_float(series_row.get("search_min_period_days"), np.nan)
     search_max = _loading.safe_float(series_row.get("search_max_period_days"), np.nan)
-    for ax, factor in zip(axes, factors):
+    for ax, factor in zip(axes, factors, strict=False):
         period = base_period * factor
         periods.append(period)
         plot_diagnostic_fold_axis(ax, prepared, period)
@@ -643,9 +645,9 @@ def plot_from_saved_results(
             for _, row in recommendations.iterrows()
         }
 
-    print("=" * 88)
-    print("SECOND PASS: creating plots without storing all periodograms in memory")
-    print("=" * 88)
+    _execution.log_info(__name__, "=" * 88)
+    _execution.log_info(__name__, "SECOND PASS: creating plots without storing all periodograms in memory")
+    _execution.log_info(__name__, "=" * 88)
     made = 0
     reused = 0
     for file_index, path in enumerate(files, start=1):
@@ -664,7 +666,7 @@ def plot_from_saved_results(
             reused += len(cached_file_rows)
             if file_index % max(S.CHECKPOINT_EVERY_N_FILES, 1) == 0:
                 _files.safe_write_csv(summary_rows, S.OUTPUT_DIR / "tables" / "ls_period_search_summary.csv")
-                print(
+                _execution.log_info(__name__,
                     f"  plot checkpoint: {file_index:,}/{len(files):,} files, "
                     f"new plots made={made:,}, existing plots reused={reused:,}"
                 )
@@ -709,20 +711,22 @@ def plot_from_saved_results(
                     row["best_per_star_plot_path"] = plot_best_per_star(metadata, prepared, result, row, catalogue_period, bls, source_label)
                     made += 1
                 except Exception as exc:
+                    _execution.report_exception(exc, __name__)
                     row["best_per_star_plot_path"] = ""
                     row["plot_error"] = repr(exc)
                 del result, bls, prepared
                 gc.collect()
         except Exception as exc:
-            print(f"  [plot warning] {path.name}: {repr(exc)}")
+            _execution.report_exception(exc, __name__)
+            _execution.log_info(__name__, f"  [plot warning] {path.name}: {repr(exc)}")
         if file_index % max(S.CHECKPOINT_EVERY_N_FILES, 1) == 0:
             _files.safe_write_csv(summary_rows, S.OUTPUT_DIR / "tables" / "ls_period_search_summary.csv")
-            print(
+            _execution.log_info(__name__,
                 f"  plot checkpoint: {file_index:,}/{len(files):,} files, "
                 f"new plots made={made:,}, existing plots reused={reused:,}"
             )
     _files.safe_write_csv(summary_rows, S.OUTPUT_DIR / "tables" / "ls_period_search_summary.csv")
-    print(
+    _execution.log_info(__name__,
         f"Plotting complete: {made:,} new plots made, "
         f"{reused:,} existing plots reused"
     )
@@ -833,9 +837,9 @@ def generate_extra_phase_fold_diagnostics(
         )
         peaks_by_key.setdefault(key, []).append(peak)
 
-    print("=" * 88)
-    print("EXTRA PHASE-FOLD DIAGNOSTICS")
-    print("=" * 88)
+    _execution.log_info(__name__, "=" * 88)
+    _execution.log_info(__name__, "EXTRA PHASE-FOLD DIAGNOSTICS")
+    _execution.log_info(__name__, "=" * 88)
     manifest_rows: list[dict[str, Any]] = []
     files_opened = 0
 
@@ -927,8 +931,9 @@ def generate_extra_phase_fold_diagnostics(
                             )
                         else:
                             manifest_rows.append(result)
-                            print(f"  [extra-fold made] alias: {result['output_path']}")
+                            _execution.log_info(__name__, f"  [extra-fold made] alias: {result['output_path']}")
                     except Exception as exc:
+                        _execution.report_exception(exc, __name__)
                         manifest_rows.append(
                             {
                                 "file": path.name,
@@ -943,7 +948,7 @@ def generate_extra_phase_fold_diagnostics(
                                 "error": repr(exc),
                             }
                         )
-                        print(f"  [extra-fold warning] alias / {path.name} / {series}: {repr(exc)}")
+                        _execution.log_info(__name__, f"  [extra-fold warning] alias / {path.name} / {series}: {repr(exc)}")
                 if harmonic_manual or series_harmonic_auto:
                     trigger = extra_trigger_reason(series_harmonic_auto, harmonic_manual, "harmonic")
                     try:
@@ -971,8 +976,9 @@ def generate_extra_phase_fold_diagnostics(
                             )
                         else:
                             manifest_rows.append(result)
-                            print(f"  [extra-fold made] harmonic: {result['output_path']}")
+                            _execution.log_info(__name__, f"  [extra-fold made] harmonic: {result['output_path']}")
                     except Exception as exc:
+                        _execution.report_exception(exc, __name__)
                         manifest_rows.append(
                             {
                                 "file": path.name,
@@ -987,10 +993,11 @@ def generate_extra_phase_fold_diagnostics(
                                 "error": repr(exc),
                             }
                         )
-                        print(f"  [extra-fold warning] harmonic / {path.name} / {series}: {repr(exc)}")
+                        _execution.log_info(__name__, f"  [extra-fold warning] harmonic / {path.name} / {series}: {repr(exc)}")
                 del prepared
                 gc.collect()
         except Exception as exc:
+            _execution.report_exception(exc, __name__)
             manifest_rows.append(
                 {
                     "file": path.name,
@@ -1008,7 +1015,7 @@ def generate_extra_phase_fold_diagnostics(
                     "error": repr(exc),
                 }
             )
-            print(f"  [extra-fold warning] {path.name}: {repr(exc)}")
+            _execution.log_info(__name__, f"  [extra-fold warning] {path.name}: {repr(exc)}")
 
     manifest = pd.DataFrame(manifest_rows)
     manifest_path = S.OUTPUT_DIR / "tables" / "extra_phase_fold_diagnostics.csv"
@@ -1020,10 +1027,10 @@ def generate_extra_phase_fold_diagnostics(
     else:
         figures_made = 0
         by_type = {}
-    print(
+    _execution.log_info(__name__,
         f"Extra folds complete: opened {files_opened:,} selected files; "
         f"verified {figures_made:,} figures "
         f"(alias={by_type.get('alias_candidates', 0):,}, harmonic={by_type.get('harmonic_tests', 0):,})"
     )
-    print(f"Extra-fold manifest: {manifest_path}")
+    _execution.log_info(__name__, f"Extra-fold manifest: {manifest_path}")
     return manifest

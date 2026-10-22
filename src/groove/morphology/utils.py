@@ -1,15 +1,16 @@
 from __future__ import annotations
+
+import contextlib
 import json
 import logging
 import re
-import sys
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
+
 import numpy as np
 import pandas as pd
-
-
 
 # ===========================================================================
 # Small utilities
@@ -44,7 +45,7 @@ def bool_series(series: pd.Series) -> pd.Series:
     return series.map(bool_value).astype(bool)
 
 
-def split_tags(value: Any) -> List[str]:
+def split_tags(value: Any) -> list[str]:
     if value is None or (isinstance(value, float) and not np.isfinite(value)):
         return []
     return [part.strip() for part in str(value).replace(",", ";").split(";") if part.strip()]
@@ -67,7 +68,7 @@ def clean_source_id(value: Any) -> str:
     if isinstance(value, float):
         if not np.isfinite(value):
             return ""
-        value = "%d" % int(value)
+        value = f'{int(int(value)):d}'
     text = str(value).strip().strip("'\"")
     if not text or text.lower() in {"nan", "none", "<na>"}:
         return ""
@@ -75,10 +76,8 @@ def clean_source_id(value: Any) -> str:
     if match:
         text = match.group(1)
     if re.fullmatch(r"\d+(\.\d+)?[eE][+-]?\d+", text):
-        try:
-            text = "%d" % int(float(text))
-        except (ValueError, OverflowError):
-            pass
+        with contextlib.suppress(ValueError, OverflowError):
+            text = f'{int(int(float(text))):d}'
     return text
 
 
@@ -150,7 +149,7 @@ def hash_json(payload: Any) -> str:
 def file_fingerprint(path: Path) -> str:
     try:
         info = path.stat()
-        return "%d_%d" % (info.st_size, int(info.st_mtime))
+        return f'{int(info.st_size):d}_{int(int(info.st_mtime)):d}'
     except OSError:
         return "missing"
 
@@ -174,7 +173,7 @@ def atomic_write_json(payload: Mapping[str, Any], path: Path) -> None:
     tmp.replace(path)
 
 
-def deep_merge(base: Mapping[str, Any], update: Mapping[str, Any]) -> Dict[str, Any]:
+def deep_merge(base: Mapping[str, Any], update: Mapping[str, Any]) -> dict[str, Any]:
     out = dict(base)
     for key, value in update.items():
         if isinstance(value, Mapping) and isinstance(out.get(key), Mapping):
@@ -184,18 +183,19 @@ def deep_merge(base: Mapping[str, Any], update: Mapping[str, Any]) -> Dict[str, 
     return out
 
 
-def setup_logging(version_dir: Optional[Path] = None, verbose: bool = False) -> logging.Logger:
-    logger = logging.getLogger("morphology")
-    logger.handlers = []
+def setup_logging(version_dir: Path | None = None, verbose: bool = False) -> logging.Logger:
+    logger = logging.getLogger("groove.morphology")
+    for handler in list(logger.handlers):
+        if getattr(handler, "_groove_file", False):
+            logger.removeHandler(handler)
+            handler.close()
     logger.setLevel(logging.DEBUG if verbose else logging.INFO)
-    console = logging.StreamHandler(sys.stdout)
-    console.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s", "%H:%M:%S"))
-    logger.addHandler(console)
     if version_dir is not None:
         log_dir = Path(version_dir)
         log_dir.mkdir(parents=True, exist_ok=True)
-        handler = logging.FileHandler(log_dir / ("run_%s.log" % stamp()), encoding="utf-8")
+        handler = logging.FileHandler(log_dir / (f"run_{stamp()}.log"), encoding="utf-8")
         handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+        handler._groove_file = True
         logger.addHandler(handler)
     return logger
 
@@ -205,7 +205,7 @@ def setup_logging(version_dir: Optional[Path] = None, verbose: bool = False) -> 
 # ===========================================================================
 
 
-def first_column(frame: pd.DataFrame, aliases: Sequence[str]) -> Optional[str]:
+def first_column(frame: pd.DataFrame, aliases: Sequence[str]) -> str | None:
     lookup = {str(c).strip().lower(): c for c in frame.columns}
     for alias in aliases:
         if alias.strip().lower() in lookup:

@@ -7,9 +7,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from . import settings as S
-from . import criteria
+from .. import execution as _execution
 from .. import resume as R
+from . import criteria
+from . import settings as S
 
 
 def place(src: Path, dst: Path) -> None:
@@ -59,12 +60,12 @@ def main() -> pd.DataFrame:
     counts.rename_axis("reason").reset_index(name="n_sources").to_csv(
         cleaned / "source_selection_reason_counts.csv", index=False)
 
-    print("=" * 70)
-    print("SOURCE SELECTION")
-    print(f"  cleaning summary : {summary_path}")
-    print(f"  sources evaluated: {len(table)}")
-    print(f"  selected         : {int(table['selected'].sum())}  ({n_placed} files staged in {selected_dir})")
+    _execution.log_info(__name__, "=" * 70)
+    _execution.log_info(__name__, "SOURCE SELECTION")
+    _execution.log_info(__name__, f"  cleaning summary : {summary_path}")
+    _execution.log_info(__name__, f"  sources evaluated: {len(table)}")
+    _execution.log_info(__name__, f"  selected         : {int(table['selected'].sum())}  ({n_placed} files staged in {selected_dir})")
     for reason, n in counts.items():
-        print(f"    rejected, {reason}: {n}")
-    print("=" * 70)
+        _execution.log_info(__name__, f"    rejected, {reason}: {n}")
+    _execution.log_info(__name__, "=" * 70)
     return table

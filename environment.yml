@@ -1,9 +1,9 @@
 name: groove
 channels: [conda-forge]
 dependencies:
-  - python=3.11
+  - python>=3.10,<3.14
   - pip
-  - numpy>=1.24,<2
+  - numpy>=1.24
   - pandas>=2.0
   - scipy>=1.10
   - astropy>=5.2

@@ -1,3 +1,5 @@
+> Historical review of version 1.0.2, not the current release.
+
 # Release review — GROOVE 1.0.2
 
 Reviewed 7 October 2026 against the supplied standalone cleaning, period-search,

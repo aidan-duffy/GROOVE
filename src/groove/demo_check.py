@@ -1,10 +1,14 @@
 """Audit generated demonstrations without assuming forced morphology labels."""
-from pathlib import Path
 import json
+from pathlib import Path
+
 import pandas as pd
 from matplotlib.image import imread
+
 from . import config
-from .morphology import persistence, settings as morphology_settings
+from . import execution as _execution
+from .morphology import persistence
+from .morphology import settings as morphology_settings
 
 
 def check(directory: str | Path) -> dict:
@@ -62,6 +66,7 @@ def check(directory: str | Path) -> dict:
         try:
             imread(path)
         except Exception as exc:
+            _execution.report_exception(exc, __name__)
             errors.append(f'Unreadable PNG {path}: {exc}')
     htmls = sorted((figures / 'maps').glob('*interactive.html'))
     expected_maps = morphology_settings.selected_maps(cfg.morphology) if cfg.morphology.get('make_maps', True) else []

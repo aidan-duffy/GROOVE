@@ -1,17 +1,18 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "groove"
-version = "1.0.9"
+version = "1.1.0"
 description = "Periodic-variability and deep-occultation search in ATLAS light curves of young stars"
 readme = "README.md"
-license = {text = "GPL-3.0-only"}
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
 authors = [{name = "Aidan Duffy"}]
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.10,<3.14"
 dependencies = [
-  "numpy>=1.24,<2",
+  "numpy>=1.24",
   "pandas>=2.0",
   "scipy>=1.10",
   "astropy>=5.2",
@@ -36,7 +37,15 @@ where = ["src"]
 groove = ["morphology/defaults.yaml"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "build>=1"]
+dev = ["pytest>=8", "build>=1", "ruff>=0.6"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+ignore = ["E501"]

@@ -37,7 +37,7 @@ All feedback, bug reports and suggestions are welcome. Contact
 
 ## Install
 
-Use Python **3.10–3.12**. Download and extract the repository ZIP from GitHub,
+Use Python **3.10–3.13**. Download and extract the repository ZIP from GitHub,
 or clone it:
 
 ```bash
@@ -243,6 +243,23 @@ the detailed analysis rather than reducing it to a single periodogram or
 embedding. Automatic labels are review suggestions; a `transit` label describes
 shape and does not establish a planetary interpretation.
 
+## Execution controls
+
+Period searches run serially by default. To use two worker processes:
+
+```bash
+groove periods -c run.yaml --n-jobs 2
+groove run -c run.yaml --skip-download --n-jobs 2
+```
+
+This parallelises period calculations; the downloader still uses one token and
+serial requests. Results are merged and checkpointed in input order. Use `-1`
+for all available CPUs, allowing for memory use. Small batches run serially.
+
+Add `--strict` to stop and show the original exception at the first caught
+stage error. Use `--rerun --strict` to debug completed calculations deliberately.
+See [configuration](docs/configuration.md#execution-and-diagnostic-controls).
+
 ## Restart or recalculate
 
 Resume is automatic: rerun the same command with the same configuration and
@@ -392,7 +409,7 @@ Follow [the Linux/WSL validation guide](docs/linux_validation.md) to test each
 stage, saved-model operations and one authenticated real download. The tools
 folder includes download-integrity and original-function comparison helpers.
 
-The extended source `3216489845356186519` has a dominant daily systematic and
+The extended source `9900000000000000023` has a dominant daily systematic and
 an injected 8.3-day stellar wave. Its rank-two stellar peak clears the existing
 replacement threshold, so the automatic alias-candidate figure shows the true
 period being recommended over rank one. This differs from the original daily

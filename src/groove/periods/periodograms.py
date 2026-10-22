@@ -1,11 +1,13 @@
 from __future__ import annotations
+
 from typing import Any
+
 import numpy as np
 from astropy.timeseries import LombScargle
-from . import settings as S
+
+from .. import execution as _execution
 from . import loading as _loading
-
-
+from . import settings as S
 
 
 def periodogram_peak_snr(power: np.ndarray, peak_power: float) -> float:
@@ -47,7 +49,8 @@ def multiharmonic_power_at_period(
             normalization=S.LS_NORMALIZATION,
         )
         return float(model.power(1.0 / period, method="auto"))
-    except Exception:
+    except Exception as _caught_error:
+        _execution.report_exception(_caught_error, __name__)
         return np.nan
 
 
@@ -116,10 +119,7 @@ def find_top_peaks(periods: np.ndarray, power: np.ndarray) -> list[tuple[float, 
     original_indices = np.flatnonzero(good)
     if len(pw) == 0:
         return []
-    if len(pw) >= 3:
-        local = np.flatnonzero((pw[1:-1] > pw[:-2]) & (pw[1:-1] >= pw[2:])) + 1
-    else:
-        local = np.arange(len(pw))
+    local = np.flatnonzero((pw[1:-1] > pw[:-2]) & (pw[1:-1] >= pw[2:])) + 1 if len(pw) >= 3 else np.arange(len(pw))
     if len(local) == 0:
         local = np.arange(len(pw))
     order = local[np.argsort(pw[local])[::-1]]
@@ -160,7 +160,8 @@ def run_lomb_scargle(time: np.ndarray, signal: np.ndarray, error: np.ndarray, mi
     raw_power = float(power[best_idx])
     try:
         raw_fap = float(model.false_alarm_probability(raw_power, method=S.LS_FAP_METHOD, maximum_frequency=max_frequency))
-    except Exception:
+    except Exception as _caught_error:
+        _execution.report_exception(_caught_error, __name__)
         raw_fap = np.nan
     peaks = find_top_peaks(periods, power)
     return {
@@ -195,7 +196,8 @@ def run_bls(time: np.ndarray, signal: np.ndarray, error: np.ndarray, signal_type
     model = S.BoxLeastSquares(time, flux_like, dy=error)
     try:
         result = model.power(periods, durations, objective="snr")
-    except Exception:
+    except Exception as _caught_error:
+        _execution.report_exception(_caught_error, __name__)
         return None
     power = np.asarray(result.power, dtype=float)
     if not np.any(np.isfinite(power)):

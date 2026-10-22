@@ -1,12 +1,15 @@
 from __future__ import annotations
+
+import gc
 import shutil
 import traceback
-import gc
 from pathlib import Path
 from typing import Any
+
 import numpy as np
 import pandas as pd
-from . import settings as S
+
+from .. import execution as _execution
 from .. import resume as R
 from . import aliases as _aliases
 from . import classify as _classify
@@ -14,9 +17,8 @@ from . import files as _files
 from . import loading as _loading
 from . import plots as _plots
 from . import recommend as _recommend
+from . import settings as S
 from . import validation as _validation
-
-
 
 
 # =============================================================================
@@ -133,6 +135,79 @@ def run_classification_regression_checks() -> None:
     )
 
 
+def _analyse_file(
+    path: Path, catalogue: dict[str, float], settings_snapshot: dict[str, Any]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list]:
+    """Analyse one file without progress, journal writes or shared parent state."""
+    missing = object()
+    previous = {key: getattr(S, key, missing) for key in settings_snapshot}
+    summary_rows, peak_rows, payloads = [], [], []
+    try:
+        for key, value in settings_snapshot.items():
+            setattr(S, key, value)
+        with _execution.error_policy(bool(S.STRICT_ERRORS)):
+            try:
+                raw = pd.read_csv(path, dtype=str, low_memory=False)
+                frame = _loading.normalise_columns(raw)
+                metadata = _loading.extract_metadata(frame, path)
+                catalogue_period = _loading.safe_float(metadata['embedded_catalogue_period_days'], np.nan)
+                external = catalogue.get(str(metadata['source_id']))
+                if external is not None and np.isfinite(external):
+                    catalogue_period = float(external)
+                for series in S.SERIES_TO_RUN:
+                    prepared = _loading.prepare_series(frame, series)
+                    if prepared is None:
+                        summary_rows.append({**metadata, 'series': series, 'status': 'skipped',
+                            'skip_reason': 'series/filter unavailable or insufficient points',
+                            'catalogue_period_days': catalogue_period})
+                        continue
+                    row, peaks, payload = _recommend.analyse_one_series(metadata, prepared, catalogue_period)
+                    summary_rows.append(row)
+                    peak_rows.extend(peaks)
+                    if payload is not None and S.KEEP_PLOT_PAYLOADS_IN_MEMORY:
+                        payloads.append((metadata, prepared, row, payload, catalogue_period))
+            except Exception as exc:
+                _execution.report_exception(exc, __name__)
+                summary_rows.append({'file': path.name, 'source_id': path.stem, 'object_name': path.stem,
+                    'series': '', 'status': 'failed', 'error': repr(exc),
+                    'traceback': traceback.format_exc(limit=8)})
+    finally:
+        for key, value in previous.items():
+            if value is missing:
+                delattr(S, key)
+            else:
+                setattr(S, key, value)
+    return summary_rows, peak_rows, payloads
+
+
+def _pending_jobs(files: list[Path], processed_keys: set) -> list[tuple[int, Path, dict]]:
+    """Resolve skips/source caps in the parent before submitting any workers."""
+    jobs = []
+    sources: set[str] = set()
+    for index, path in enumerate(files, start=1):
+        remaining = [series for series in S.SERIES_TO_RUN
+                     if not (S.SKIP_ALREADY_PROCESSED and (path.name, series) in processed_keys)]
+        if not remaining:
+            _execution.log_info(__name__, f'[{index:,}/{len(files):,}] skip completed file: {path.name}')
+            continue
+        if S.MAX_SOURCES is not None:
+            # Only the ID is needed here; all scientific rows are loaded by the worker.
+            try:
+                first = _loading.normalise_columns(pd.read_csv(path, dtype=str, nrows=1))
+                source_id = str(_loading.extract_metadata(first, path)['source_id'])
+            except Exception as exc:
+                _execution.report_exception(exc, __name__)
+                source_id = path.stem  # let the worker produce the normal failed row
+            if source_id not in sources and len(sources) >= int(S.MAX_SOURCES):
+                continue
+            sources.add(source_id)
+        snapshot = R.settings_dict(S)
+        snapshot['SERIES_TO_RUN'] = remaining
+        snapshot['STRICT_ERRORS'] = _execution.is_strict()
+        jobs.append((index, path, snapshot))
+    return jobs
+
+
 def main() -> None:
     validate_configuration()
 
@@ -178,7 +253,7 @@ def main() -> None:
         previous_signature = json.loads(signature_path.read_text()).get("signature", "")
     use_cache = S.SKIP_ALREADY_PROCESSED and previous_signature == analysis_signature
     if not use_cache and (S.OUTPUT_DIR / "tables" / "ls_period_search_summary.csv").exists():
-        print("[cache reset] Inputs, settings or code changed; recomputing scientific results.")
+        _execution.log_info(__name__, "[cache reset] Inputs, settings or code changed; recomputing scientific results.")
     _files.write_run_config()
     import json
     signature_path.write_text(json.dumps({"signature": analysis_signature}))
@@ -192,7 +267,7 @@ def main() -> None:
             cached_summary = pd.read_csv(summary_path, dtype={"source_id": str}, low_memory=False)
             cached_peaks = pd.read_csv(peaks_path, dtype={"source_id": str}, low_memory=False)
         except (OSError, ValueError, pd.errors.ParserError, pd.errors.EmptyDataError) as exc:
-            print(f'[cache repair] Unreadable aggregate period tables: {exc}; recovering source journals.')
+            _execution.log_info(__name__, f'[cache repair] Unreadable aggregate period tables: {exc}; recovering source journals.')
             cached_summary, cached_peaks = pd.DataFrame(), pd.DataFrame()
         missing_summary, missing_peaks = _files.cache_schema_missing(
             set(cached_summary.columns), set(cached_peaks.columns)
@@ -209,19 +284,19 @@ def main() -> None:
                     + " Use a new OUTPUT_DIR, disable SKIP_ALREADY_PROCESSED, or enable "
                     "RESTART_IF_CACHE_SCHEMA_INCOMPATIBLE."
                 )
-            print(f"[cache reset] {message}")
-            print("[cache reset] Reprocessing this OUTPUT_DIR with the current pipeline; old tables will be replaced.")
+            _execution.log_info(__name__, f"[cache reset] {message}")
+            _execution.log_info(__name__, "[cache reset] Reprocessing this OUTPUT_DIR with the current pipeline; old tables will be replaced.")
         else:
             summary_rows = cached_summary.to_dict("records")
             peak_rows_all = cached_peaks.to_dict("records")
-            print(
+            _execution.log_info(__name__,
                 f"Loaded compatible cached results: {len(summary_rows):,} summary rows, "
                 f"{len(peak_rows_all):,} peak rows"
             )
     elif use_cache and (summary_path.exists() or peaks_path.exists()):
-        print("[cache reset] Only one cached result table exists; reprocessing to keep summary and peaks consistent.")
+        _execution.log_info(__name__, "[cache reset] Only one cached result table exists; reprocessing to keep summary and peaks consistent.")
     if use_cache:
-        summary_rows, peak_rows_all = _files.restore_source_checkpoints(analysis_signature, summary_rows, peak_rows_all)
+        summary_rows, peak_rows_all = _files.restore_source_checkpoints(analysis_signature, summary_rows, peak_rows_all, files=files)
     # Freeze the alias-memory input for this analysis. Our own output must not
     # be merged back into itself after an interrupted plotting pass.
     base_path = S.OUTPUT_DIR / 'tables' / 'alias_memory_input.json'
@@ -238,17 +313,16 @@ def main() -> None:
     # crash the script. By default this stays empty and plots are generated in a
     # second streaming pass after final alias/harmonic decisions are known.
     plot_payloads: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any] | None, float]] = []
-    sources_seen_this_run: set[str] = set()
 
-    print("=" * 88)
-    print("ADAPTIVE ATLAS LS PERIOD SEARCH WITH FIELD-ALIAS MEMORY")
-    print("=" * 88)
-    print(f"Input folder:  {S.INPUT_DIR}")
-    print(f"Output folder: {S.OUTPUT_DIR}")
-    print(f"Files found:   {len(files):,}")
-    print(f"Series:        {S.SERIES_TO_RUN}")
-    print(f"Period range:  {S.MIN_PERIOD_DAYS:g}--{S.MAX_PERIOD_DAYS:g} d, baseline-limited")
-    print(
+    _execution.log_info(__name__, "=" * 88)
+    _execution.log_info(__name__, "ADAPTIVE ATLAS LS PERIOD SEARCH WITH FIELD-ALIAS MEMORY")
+    _execution.log_info(__name__, "=" * 88)
+    _execution.log_info(__name__, f"Input folder:  {S.INPUT_DIR}")
+    _execution.log_info(__name__, f"Output folder: {S.OUTPUT_DIR}")
+    _execution.log_info(__name__, f"Files found:   {len(files):,}")
+    _execution.log_info(__name__, f"Series:        {S.SERIES_TO_RUN}")
+    _execution.log_info(__name__, f"Period range:  {S.MIN_PERIOD_DAYS:g}--{S.MAX_PERIOD_DAYS:g} d, baseline-limited")
+    _execution.log_info(__name__,
         "Main plot fold: "
         + (
             f"forced to {float(S.FORCED_FOLD_PERIOD_DAYS):g} d"
@@ -256,70 +330,46 @@ def main() -> None:
             else "automatic recommended series period"
         )
     )
-    print(f"Alias memory:  {S.ALIAS_MEMORY_CSV}")
-    print("=" * 88)
+    _execution.log_info(__name__, f"Alias memory:  {S.ALIAS_MEMORY_CSV}")
+    _execution.log_info(__name__, "=" * 88)
 
-    completed = 0
-    for file_index, path in enumerate(files, start=1):
-        # Do this before reading the light curve. The checkpoint contains one
-        # terminal row per requested series, so a fully completed file needs no
-        # I/O or period-search work on a resumed run.
-        expected_file_keys = {(path.name, series) for series in S.SERIES_TO_RUN}
-        if S.SKIP_ALREADY_PROCESSED and expected_file_keys.issubset(processed_keys):
-            print(f"[{file_index:,}/{len(files):,}] skip completed file: {path.name}")
-            continue
-        summary_start, peaks_start = len(summary_rows), len(peak_rows_all)
-        try:
-            raw = pd.read_csv(path, dtype=str, low_memory=False)
-            df = _loading.normalise_columns(raw)
-            metadata = _loading.extract_metadata(df, path)
-            catalogue_period = _loading.safe_float(metadata["embedded_catalogue_period_days"], np.nan)
-            ext_period = external_catalogue.get(str(metadata["source_id"]))
-            if ext_period is not None and np.isfinite(ext_period):
-                catalogue_period = float(ext_period)
-
-            source_key_for_limit = str(metadata.get("source_id", ""))
-            if S.MAX_SOURCES is not None and source_key_for_limit not in sources_seen_this_run:
-                if len(sources_seen_this_run) >= int(S.MAX_SOURCES):
-                    continue
-            sources_seen_this_run.add(source_key_for_limit)
-
-            for series in S.SERIES_TO_RUN:
-                key = (path.name, series)
-                if S.SKIP_ALREADY_PROCESSED and key in processed_keys:
-                    print(f"[{file_index:,}/{len(files):,}] skip existing: {path.name} / {series}")
-                    continue
-                prepared = _loading.prepare_series(df, series)
-                if prepared is None:
-                    summary_rows.append({**metadata, "series": series, "status": "skipped", "skip_reason": "series/filter unavailable or insufficient points", "catalogue_period_days": catalogue_period})
-                    continue
-                row, peaks, payload = _recommend.analyse_one_series(metadata, prepared, catalogue_period)
-                summary_rows.append(row)
-                peak_rows_all.extend(peaks)
-                if payload is not None and S.KEEP_PLOT_PAYLOADS_IN_MEMORY:
-                    plot_payloads.append((metadata, prepared, row, payload, catalogue_period))
-                # Free heavy arrays immediately in normal large-run mode.
-                if not S.KEEP_PLOT_PAYLOADS_IN_MEMORY:
-                    payload = None
-                print(
-                    f"[{file_index:,}/{len(files):,}] {path.name} / {series}: "
-                    f"status={row.get('status')}, raw={row.get('raw_ls_best_period_days', np.nan):.6g} d, "
-                    f"topNcat={row.get('catalogue_recovery_type_top_n', '')}"
-                )
-        except Exception as exc:
-            print(f"[{file_index:,}/{len(files):,}] FAILED {path.name}: {repr(exc)}")
-            summary_rows.append({"file": path.name, "source_id": path.stem, "object_name": path.stem, "series": "", "status": "failed", "error": repr(exc), "traceback": traceback.format_exc(limit=8)})
-
-        _files.save_source_checkpoint(analysis_signature, path,
-                                      summary_rows[summary_start:], peak_rows_all[peaks_start:])
-        completed += 1
-        if completed % S.CHECKPOINT_EVERY_N_FILES == 0:
-            # Save raw checkpoint before alias memory is recomputed. This is
-            # intentionally frequent so a crash does not lose hours of work.
-            _files.save_raw_checkpoint(summary_rows, peak_rows_all)
-            processed_keys = _files.build_processed_keys_from_rows(summary_rows)
-            print(f"  checkpoint saved after {completed:,} files")
-            gc.collect()
+    jobs = _pending_jobs(files, processed_keys)
+    n_jobs = int(S.PERIOD_N_JOBS)
+    if n_jobs == 0:
+        raise ValueError('periods.period_n_jobs must be a non-zero integer')
+    parallel = n_jobs != 1 and len(jobs) >= 8
+    if n_jobs != 1:
+        for _, _, snapshot in jobs:
+            snapshot['KEEP_PLOT_PAYLOADS_IN_MEMORY'] = False
+    if parallel:
+        from joblib import Parallel, delayed
+        executor = Parallel(n_jobs=n_jobs, backend='loky', return_as='generator',
+                            batch_size=1, pre_dispatch='2*n_jobs')
+        results = executor(delayed(_analyse_file)(path, external_catalogue, snapshot)
+                           for _, path, snapshot in jobs)
+    else:
+        results = (_analyse_file(path, external_catalogue, snapshot) for _, path, snapshot in jobs)
+    try:
+        for completed, ((file_index, path, _snapshot), result) in enumerate(zip(jobs, results, strict=True), start=1):
+            new_summary, new_peaks, new_payloads = result
+            summary_rows.extend(new_summary)
+            peak_rows_all.extend(new_peaks)
+            plot_payloads.extend(new_payloads)
+            for row in new_summary:
+                if row.get('status') == 'failed':
+                    _execution.log_info(__name__, f'{path.name}: {row.get("error", "unknown error")}')
+                _execution.log_info(__name__, f'[{file_index:,}/{len(files):,}] {path.name} / '
+                    f'{row.get("series")}: status={row.get("status")}, '
+                    f'raw={row.get("raw_ls_best_period_days", np.nan):.6g} d')
+            _files.save_source_checkpoint(analysis_signature, path, new_summary, new_peaks)
+            if completed % S.CHECKPOINT_EVERY_N_FILES == 0:
+                _files.save_raw_checkpoint(summary_rows, peak_rows_all)
+                _execution.log_info(__name__, f'  checkpoint saved after {completed:,} files')
+                gc.collect()
+    finally:
+        if parallel:
+            results.close()
+            executor.__exit__(None, None, None)
 
     # Build/update alias memory after all stars are searched.
     summary_df = pd.DataFrame(summary_rows)
@@ -374,6 +424,7 @@ def main() -> None:
                 metadata, prepared, payload["result"], row, catalogue_period, payload.get("bls"), source_label
             )
         except Exception as exc:
+            _execution.report_exception(exc, __name__)
             row["best_per_star_plot_path"] = ""
             row["plot_error"] = str(exc)
 
@@ -414,22 +465,22 @@ def main() -> None:
     if not any(row.get("status") == "failed" for row in summary_rows):
         _files.mark_run_complete(run_signature)
 
-    print("=" * 88)
-    print("DONE")
-    print(f"Summary:         {S.OUTPUT_DIR / 'tables' / 'ls_period_search_summary.csv'}")
-    print(f"Peaks:           {S.OUTPUT_DIR / 'tables' / 'ls_period_search_peaks.csv'}")
-    print(f"Consensus:       {S.OUTPUT_DIR / 'tables' / 'ls_source_consensus.csv'}")
-    print(f"Recommendations: {S.OUTPUT_DIR / 'tables' / 'source_period_recommendations.csv'}")
-    print(f"Alias memory:    {S.OUTPUT_DIR / 'tables' / 'field_alias_memory.csv'}")
+    _execution.log_info(__name__, "=" * 88)
+    _execution.log_info(__name__, "DONE")
+    _execution.log_info(__name__, f"Summary:         {S.OUTPUT_DIR / 'tables' / 'ls_period_search_summary.csv'}")
+    _execution.log_info(__name__, f"Peaks:           {S.OUTPUT_DIR / 'tables' / 'ls_period_search_peaks.csv'}")
+    _execution.log_info(__name__, f"Consensus:       {S.OUTPUT_DIR / 'tables' / 'ls_source_consensus.csv'}")
+    _execution.log_info(__name__, f"Recommendations: {S.OUTPUT_DIR / 'tables' / 'source_period_recommendations.csv'}")
+    _execution.log_info(__name__, f"Alias memory:    {S.OUTPUT_DIR / 'tables' / 'field_alias_memory.csv'}")
     if not recommendations.empty and "recommendation_label" in recommendations.columns:
-        print("Recommendation labels:")
-        print(recommendations["recommendation_label"].fillna("unknown").value_counts().to_string())
+        _execution.log_info(__name__, "Recommendation labels:")
+        _execution.log_info(__name__, recommendations["recommendation_label"].fillna("unknown").value_counts().to_string())
     if not recommendations.empty and "confidence_class" in recommendations.columns:
-        print("Confidence classes:")
-        print(recommendations["confidence_class"].fillna("unknown").value_counts().to_string())
+        _execution.log_info(__name__, "Confidence classes:")
+        _execution.log_info(__name__, recommendations["confidence_class"].fillna("unknown").value_counts().to_string())
     if 'master_plot_path' in locals() and master_plot_path:
-        print(f"Master review plot: {master_plot_path}")
+        _execution.log_info(__name__, f"Master review plot: {master_plot_path}")
     if 'extra_fold_manifest' in locals() and not extra_fold_manifest.empty:
         made = int(extra_fold_manifest.get("status", pd.Series(dtype=str)).astype(str).eq("made").sum())
-        print(f"Extra phase-fold figures: {made:,}")
-    print("=" * 88)
+        _execution.log_info(__name__, f"Extra phase-fold figures: {made:,}")
+    _execution.log_info(__name__, "=" * 88)

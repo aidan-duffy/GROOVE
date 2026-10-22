@@ -109,3 +109,13 @@ cannot be recovered. If an older completed morphology reference blocks the
 first resumed full run, use a fresh validation folder or a deliberate --rerun.
 Once 1.0.9 establishes its state, subsequent interruptions use the new resume
 mechanism. Stop the old process before installing a source update.
+
+
+### Period worker processes
+
+Use `groove periods -c run.yaml --n-jobs 2`, or supply the same flag to
+`groove run`. The parent merges results in input order and writes source journals.
+After interruption, repeat the command; completed journals are recovered before
+new workers are submitted. A failed source is retried. Plots still use the
+existing independent output receipts. `--strict` helps diagnose a failure;
+`--rerun` deliberately invalidates saved work.

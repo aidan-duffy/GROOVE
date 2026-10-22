@@ -96,3 +96,13 @@ above. Interrupted UMAP optimisation restarts from cached source
 features rather than from an optimiser iteration. Some aggregate rendering and
 validation calculations can repeat during output repair. This release does not
 add per-source timeouts or parallel LS/BLS workers.
+
+
+## Version 1.1.0 implementation audit
+
+The baseline and historical results above are retained as historical evidence.
+See [CHANGES_APPLIED.md](../CHANGES_APPLIED.md) for current environment versions,
+scientific regression cases, serial/parallel equality, interruption recovery,
+per-module test runs, extended-demo checks and the remaining validation limits.
+Python/NumPy compatibility tests do not establish scientific catalogue purity or
+live authenticated ATLAS service availability.

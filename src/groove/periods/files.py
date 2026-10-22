@@ -1,18 +1,20 @@
 from __future__ import annotations
-import json
-import hashlib
+
 import gc
+import hashlib
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
 import numpy as np
 import pandas as pd
-from . import settings as S
+
+from .. import execution as _execution
 from . import loading as _loading
 from . import recommend as _recommend
+from . import settings as S
 from . import validation as _validation
-
-
 
 
 def plot_review_folders(row: dict[str, Any], primary_label: str) -> list[Path]:
@@ -83,6 +85,7 @@ def save_figure(fig, path: Path, **kwargs) -> None:
     """Publish a PNG only after its complete temporary file validates."""
     import os
     import tempfile
+
     from .. import resume as R
     if R.ACTIVE_PRODUCTS is not None and R.ACTIVE_PRODUCTS.current(path):
         return
@@ -165,7 +168,8 @@ def completed_run_is_unchanged(signature: str) -> bool:
             return False
         outputs = [Path(value) for value in state.get("output_files", [])]
         return bool(outputs) and all(output_file_is_complete(path) for path in outputs)
-    except Exception:
+    except Exception as _caught_error:
+        _execution.report_exception(_caught_error, __name__)
         return False
 
 
@@ -208,7 +212,8 @@ def clean_for_csv(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 # If a list slips through, store a compact semicolon string.
                 try:
                     out[key] = ";".join(str(_loading.json_safe(v)) for v in value)
-                except Exception:
+                except Exception as _caught_error:
+                    _execution.report_exception(_caught_error, __name__)
                     out[key] = str(type(value).__name__)
             elif isinstance(value, dict):
                 # Avoid writing large nested objects to CSV.
@@ -248,7 +253,8 @@ def safe_write_csv(rows_or_df: Any, path: Path, index: bool = False) -> None:
         try:
             if tmp.exists():
                 tmp.unlink()
-        except Exception:
+        except Exception as _caught_error:
+            _execution.report_exception(_caught_error, __name__)
             pass
 
 
@@ -355,7 +361,7 @@ def analysis_run_signature(files: list[Path]) -> str:
     """Scientific cache identity; visual/restart switches do not discard LS work."""
     from .. import resume as R
     config = {k: v for k, v in current_run_config().items()
-              if not any(token in k for token in ('PLOT', 'FIGURE', 'CHECKPOINT', 'PROGRESS', 'SKIP_', 'FORCE_RERUN', 'SAVE_PNG', 'SAVE_PDF', 'FORCED_FOLD_PERIOD_DAYS'))}
+              if not any(token in k for token in ('PLOT', 'FIGURE', 'CHECKPOINT', 'PROGRESS', 'SKIP_', 'FORCE_RERUN', 'SAVE_PNG', 'SAVE_PDF', 'FORCED_FOLD_PERIOD_DAYS', 'PERIOD_N_JOBS', 'STRICT_ERRORS'))}
     return R.hash_value({'code': R.code_hash('periods'), 'settings': config,
                          'inputs': {str(p.resolve()): R.digest(p) for p in files},
                          'external_inputs': external_input_state()})
@@ -372,7 +378,7 @@ def save_source_checkpoint(signature, path, summary, peaks):
     R.atomic_json(journal, {'signature': signature, 'summary': clean_for_csv(summary), 'peaks': clean_for_csv(peaks)})
 
 
-def restore_source_checkpoints(signature, summary, peaks):
+def restore_source_checkpoints(signature, summary, peaks, files=None):
     from .. import resume as R
     entries = [R.read_json(p) for p in (S.OUTPUT_DIR / 'tables' / 'source_checkpoints').glob('*.json')]
     entries = [e for e in entries if e.get('signature') == signature]
@@ -385,8 +391,15 @@ def restore_source_checkpoints(signature, summary, peaks):
         for row in entry.get('peaks', []):
             ranked[(str(row.get('file')), str(row.get('series')), str(row.get('rank')))] = row
     if entries:
-        print(f'[resume] recovered {len(entries):,} per-source period checkpoints')
-    return list(rows.values()), list(ranked.values())
+        _execution.log_info(__name__, f'[resume] recovered {len(entries):,} per-source period checkpoints')
+    file_order = {path.name: i for i, path in enumerate(files or [])}
+    series_order = {name: i for i, name in enumerate(S.SERIES_TO_RUN)}
+    def order(row):
+        name = str(row.get('file'))
+        return (file_order.get(name, len(file_order)), name,
+                series_order.get(str(row.get('series')), len(series_order)),
+                int(row.get('rank', 0)))
+    return sorted(rows.values(), key=order), sorted(ranked.values(), key=order)
 
 
 def external_input_state():

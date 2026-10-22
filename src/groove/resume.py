@@ -1,13 +1,14 @@
 """Content-checked stage receipts and atomic per-source/product checkpoints."""
 from __future__ import annotations
+
+import hashlib
+import inspect
+import json
 from contextlib import contextmanager
 from functools import wraps
-import inspect
-import hashlib
-import json
 from pathlib import Path
-import os
-import tempfile
+
+from . import execution as _execution
 
 
 def digest(path):
@@ -185,7 +186,7 @@ def resumable(stage):
             if not force and saved.get('signature') == fingerprint and saved.get('status') == 'complete':
                 old = saved.get('outputs', {})
                 if old and all(digest(p) == sha for p, sha in old.items()):
-                    print(f'[resume] {stage}: complete; unchanged inputs/settings and checked outputs.')
+                    _execution.log_info(__name__, f'[resume] {stage}: complete; unchanged inputs/settings and checked outputs.')
                     return 0 if stage == 'download' else None
             atomic_json(marker, {'signature': fingerprint, 'status': 'running'})
             with products(marker.parent / (stage + '_products'), fingerprint, force):

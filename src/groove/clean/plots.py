@@ -1,14 +1,15 @@
 from __future__ import annotations
+
 import re
 from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from . import settings as S
+
+from .. import execution as _execution
 from . import cuts as _cuts
-
-
-
+from . import settings as S
 
 # ============================================================================
 # PLOTTING HELPERS
@@ -33,7 +34,7 @@ def make_summary_figure(summary_df: pd.DataFrame) -> None:
     """Create one compact six-panel overview of the cleaning run."""
     ok = summary_df.loc[summary_df["status"].eq("ok")].copy()
     if ok.empty:
-        print("No successfully cleaned files available for summary plots.")
+        _execution.log_info(__name__, "No successfully cleaned files available for summary plots.")
         return
 
     numeric_columns = [
@@ -163,7 +164,7 @@ def make_summary_figure(summary_df: pd.DataFrame) -> None:
 def make_reason_figure(reason_df: pd.DataFrame) -> None:
     """Plot the most common point-rejection reasons."""
     if reason_df.empty:
-        print("No rejection reasons available for the reason plot.")
+        _execution.log_info(__name__, "No rejection reasons available for the reason plot.")
         return
 
     top = reason_df.head(max(1, S.TOP_N_REASONS)).iloc[::-1]
@@ -194,7 +195,8 @@ def make_example_before_after_plot(
         raw = pd.read_csv(input_file, dtype=str)
         all_rows, _ = _cuts.clean_atlas_df(raw)
     except Exception as error:
-        print(f"Could not make example plot for {input_file.name}: {error}")
+        _execution.report_exception(error, __name__)
+        _execution.log_info(__name__, f"Could not make example plot for {input_file.name}: {error}")
         return
 
     value_column, y_label, invert_axis = _plot_values(all_rows)

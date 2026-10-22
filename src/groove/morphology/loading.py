@@ -1,16 +1,19 @@
 from __future__ import annotations
+
 import logging
 import re
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
+
 import joblib
 import numpy as np
 import pandas as pd
-from . import settings as S
+
+from .. import execution as _execution
 from . import persistence as _persistence
+from . import settings as S
 from . import utils as _utils
-
-
 
 
 def likely_lightcurve_file(path: Path) -> bool:
@@ -20,9 +23,9 @@ def likely_lightcurve_file(path: Path) -> bool:
     return not any(word in lowered for word in S.SKIP_FILE_WORDS)
 
 
-def discover_lightcurve_files(inputs: Sequence[Any]) -> Tuple[List[Path], List[Dict[str, Any]]]:
-    found: List[Path] = []
-    problems: List[Dict[str, Any]] = []
+def discover_lightcurve_files(inputs: Sequence[Any]) -> tuple[list[Path], list[dict[str, Any]]]:
+    found: list[Path] = []
+    problems: list[dict[str, Any]] = []
     for item in inputs:
         path = Path(str(item))
         if not path.exists():
@@ -118,12 +121,12 @@ def standardise_lightcurve_file(path: Path, dataset: str, bands: Sequence[str]) 
 
 
 def load_lightcurves(specs: Sequence[Mapping[str, Any]], config: Mapping[str, Any],
-                     logger: logging.Logger) -> Tuple[Dict[str, Dict[str, Any]], pd.DataFrame]:
+                     logger: logging.Logger) -> tuple[dict[str, dict[str, Any]], pd.DataFrame]:
     bands = [b for b, on in (("c", config.get("use_c_band", False)),
                              ("o", config.get("use_o_band", True))) if on]
     minimum = int(config.get("minimum_observations", 50))
-    sources: Dict[str, Dict[str, Any]] = {}
-    problems: List[Dict[str, Any]] = []
+    sources: dict[str, dict[str, Any]] = {}
+    problems: list[dict[str, Any]] = []
 
     for spec in specs:
         dataset = str(spec.get("name", "dataset"))
@@ -135,8 +138,9 @@ def load_lightcurves(specs: Sequence[Mapping[str, Any]], config: Mapping[str, An
             try:
                 frame = standardise_lightcurve_file(path, dataset, bands)
             except Exception as error:
+                _execution.report_exception(error, __name__)
                 problems.append({"dataset": dataset, "input": str(path),
-                                 "reason": "read_failed: %s" % error})
+                                 "reason": f"read_failed: {error}"})
                 continue
             if frame.empty:
                 problems.append({"dataset": dataset, "input": str(path),
@@ -154,14 +158,14 @@ def load_lightcurves(specs: Sequence[Mapping[str, Any]], config: Mapping[str, An
                 record["files"].append(path.name)
                 record["fingerprints"].append(_utils.file_fingerprint(path))
 
-    out: Dict[str, Dict[str, Any]] = {}
+    out: dict[str, dict[str, Any]] = {}
     for key, record in sources.items():
         data = pd.concat(record["frames"], ignore_index=True)
         data = data.drop_duplicates(subset=["time", "filter"]).sort_values("time")
         data = data.reset_index(drop=True)
         if len(data) < minimum:
             problems.append({"dataset": record["dataset"], "source_id": key,
-                             "reason": "below_minimum_observations_%d" % len(data)})
+                             "reason": f'below_minimum_observations_{int(len(data)):d}'})
             continue
         out[key] = {
             "source_key": key, "source_id": key, "dataset": record["dataset"],
@@ -176,7 +180,7 @@ def load_lightcurves(specs: Sequence[Mapping[str, Any]], config: Mapping[str, An
 def load_selected_lightcurves(specs: Sequence[Mapping[str, Any]],
                               config: Mapping[str, Any],
                               source_ids: Sequence[str],
-                              logger: logging.Logger) -> Dict[str, Dict[str, Any]]:
+                              logger: logging.Logger) -> dict[str, dict[str, Any]]:
     """Load a small named subset through the normal production standardiser.
 
     This is used only by additive diagnostic plots.  It deliberately applies
@@ -189,7 +193,7 @@ def load_selected_lightcurves(specs: Sequence[Mapping[str, Any]],
     bands = [band for band, enabled in (
         ("c", config.get("use_c_band", False)),
         ("o", config.get("use_o_band", True))) if enabled]
-    collected: Dict[str, Dict[str, Any]] = {}
+    collected: dict[str, dict[str, Any]] = {}
     for spec in specs:
         dataset = str(spec.get("name", "dataset"))
         priority = int(spec.get("priority", 0))
@@ -199,6 +203,7 @@ def load_selected_lightcurves(specs: Sequence[Mapping[str, Any]],
             try:
                 frame = standardise_lightcurve_file(path, dataset, bands)
             except Exception as error:
+                _execution.report_exception(error, __name__)
                 logger.warning("Could not read selected light curve %s: %s", path, error)
                 continue
             for source_id, block in frame.groupby("source_id", sort=False):
@@ -214,7 +219,7 @@ def load_selected_lightcurves(specs: Sequence[Mapping[str, Any]],
                     record["dataset"] = dataset
                 record["frames"].append(block)
                 record["files"].append(str(path))
-    result: Dict[str, Dict[str, Any]] = {}
+    result: dict[str, dict[str, Any]] = {}
     for source_id, record in collected.items():
         data = pd.concat(record["frames"], ignore_index=True)
         data = data.drop_duplicates(subset=["time", "filter"]).sort_values("time")
@@ -236,11 +241,11 @@ def load_selected_lightcurves(specs: Sequence[Mapping[str, Any]],
 
 
 def read_period_tables(specs: Sequence[Mapping[str, Any]], config: Mapping[str, Any],
-                       logger: logging.Logger) -> Tuple[Dict[str, Dict[str, Any]], pd.DataFrame]:
+                       logger: logging.Logger) -> tuple[dict[str, dict[str, Any]], pd.DataFrame]:
     """Source-level recommendations are authoritative; summaries are diagnostics."""
     tolerance = float(config.get("period_conflict_relative_tolerance", 0.001))
-    chosen: Dict[str, Dict[str, Any]] = {}
-    conflicts: List[Dict[str, Any]] = []
+    chosen: dict[str, dict[str, Any]] = {}
+    conflicts: list[dict[str, Any]] = []
 
     for spec in specs:
         dataset = str(spec.get("name", "dataset"))
@@ -316,7 +321,7 @@ def read_table(path: Path) -> pd.DataFrame:
 
 
 def load_catalogue_for_plot_only(version_dir: Path,
-                                 logger: logging.Logger) -> Tuple[pd.DataFrame, str]:
+                                 logger: logging.Logger) -> tuple[pd.DataFrame, str]:
     table_path = Path(version_dir) / "tables" / "all_sources.csv"
     try:
         table = read_table(table_path)

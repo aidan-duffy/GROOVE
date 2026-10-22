@@ -1,16 +1,21 @@
 from __future__ import annotations
+
 import argparse
+import contextlib
 import logging
 import math
 import shutil
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
+
 import joblib
 import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
 import numpy as np
 import pandas as pd
-from . import settings as S
+from matplotlib.lines import Line2D
+
+from .. import execution as _execution
 from .. import resume as R
 from . import classify as _classify
 from . import embedding as _embedding
@@ -18,9 +23,8 @@ from . import features as _features
 from . import loading as _loading
 from . import outputs as _outputs
 from . import persistence as _persistence
+from . import settings as S
 from . import utils as _utils
-
-
 
 
 def build_neighbour_review_pages(validation: pd.DataFrame, table: pd.DataFrame,
@@ -37,7 +41,7 @@ def build_neighbour_review_pages(validation: pd.DataFrame, table: pd.DataFrame,
         cols = 3
         rows = int(math.ceil(len(keys) / cols))
         fig, axes = plt.subplots(rows, cols, figsize=(15, 4.2 * rows), squeeze=False)
-        for rank, (ax, key) in enumerate(zip(axes.ravel(), keys)):
+        for rank, (ax, key) in enumerate(zip(axes.ravel(), keys, strict=False)):
             path = fold_paths.get(key)
             row = lookup.loc[key] if key in lookup.index else None
             if path is not None and Path(path).exists():
@@ -47,23 +51,19 @@ def build_neighbour_review_pages(validation: pd.DataFrame, table: pd.DataFrame,
                         transform=ax.transAxes)
             if row is not None:
                 if rank == 0:
-                    subtitle = "ANCHOR | %s | %s\n%s" % (
+                    subtitle = "ANCHOR | {} | {}\n{}".format(
                         row.get("source_id", ""), row.get("final_primary_tag", ""),
                         row.get("interest_status", ""))
                 else:
                     detail = block.iloc[rank - 1]
-                    subtitle = ("NN %d | %s | %s\nfeature d=%.3g; UMAP d=%.3g; %s" % (
-                        rank, row.get("source_id", ""), row.get("final_primary_tag", ""),
-                        _utils.finite_float(detail.get("original_feature_distance"), np.nan),
-                        _utils.finite_float(detail.get("umap_distance"), np.nan),
-                        row.get("interest_status", "")))
+                    subtitle = ('NN {:d} | {!s} | {!s}\nfeature d={:.3g}; UMAP d={:.3g}; {!s}'.format(int(rank), row.get("source_id", ""), row.get("final_primary_tag", ""), _utils.finite_float(detail.get("original_feature_distance"), np.nan), _utils.finite_float(detail.get("umap_distance"), np.nan), row.get("interest_status", "")))
                 ax.set_title(subtitle, fontsize=8)
             ax.axis("off")
         for ax in axes.ravel()[len(keys):]:
             ax.axis("off")
-        fig.suptitle("Nearest-neighbour morphology validation: %s" % anchor_id, fontsize=13)
+        fig.suptitle(f"Nearest-neighbour morphology validation: {anchor_id}", fontsize=13)
         fig.tight_layout(rect=(0, 0, 1, 0.96))
-        fig.savefig(maps / ("neighbour_validation_%s.png" % _utils.safe_name(anchor_id)), dpi=140)
+        fig.savefig(maps / (f"neighbour_validation_{_utils.safe_name(anchor_id)}.png"), dpi=140)
         plt.close(fig)
         pages += 1
     logger.info("Nearest-neighbour morphology review pages written for %d anchors", pages)
@@ -95,7 +95,7 @@ def _fold_scatter(ax, frame: pd.DataFrame, period: float, origin: float,
                     marker="o" if band == "c" else "s", markersize=2.0,
                     linestyle="none", alpha=0.55,
                     color=S.SECTION_COLOURS[section % len(S.SECTION_COLOURS)],
-                    rasterized=True, label="%s Q%d" % (band.upper(), section + 1))
+                    rasterized=True, label=f'{band.upper()!s} Q{int(section + 1):d}')
         n_bins = 80
         bins = np.minimum((phase * n_bins).astype(int), n_bins - 1)
         centres = (np.arange(n_bins, dtype=float) + 0.5) / n_bins
@@ -107,7 +107,7 @@ def _fold_scatter(ax, frame: pd.DataFrame, period: float, origin: float,
         if np.isfinite(medians).sum() >= 4:
             ax.plot(np.r_[centres, centres + 1.0], np.r_[medians, medians],
                     color="teal" if band == "c" else "black", linewidth=1.0,
-                    alpha=0.8, label="%s bin median" % band.upper(), zorder=10)
+                    alpha=0.8, label=f"{band.upper()} bin median", zorder=10)
     ax.invert_yaxis()
     ax.set_xlim(0, 2)
     ax.set_xlabel("Phase")
@@ -120,7 +120,7 @@ def create_fold_plot(record: Mapping[str, Any], row: Mapping[str, Any], output: 
     fig, ax = plt.subplots(figsize=(5.2, 3.6))
     period = _utils.finite_float(row.get("recommended_period_days"))
     _fold_scatter(ax, record["data"], period, record["origin"])
-    ax.set_title("%s\n%s | recommended P=%.5g d | conf=%.2f" % (
+    ax.set_title("{}\n{} | recommended P={:.5g} d | conf={:.2f}".format(
         row.get("source_id", ""), row.get("final_primary_tag", ""),
         period, _utils.finite_float(row.get("final_confidence"), 0.0)), fontsize=8)
     ax.legend(fontsize=6, markerscale=3, loc="best", framealpha=0.7)
@@ -145,7 +145,7 @@ def create_review_plot(record: Mapping[str, Any], row: Mapping[str, Any], output
 def build_family_maps(records: Sequence[Mapping[str, Any]], table: pd.DataFrame,
                       version_dir: Path, config: Mapping[str, Any],
                       logger: logging.Logger,
-                      fold_paths: Optional[Mapping[str, Path]] = None) -> pd.DataFrame:
+                      fold_paths: Mapping[str, Path] | None = None) -> pd.DataFrame:
     """Typical, strongest, and ambiguous examples plus category maps."""
     from sklearn.metrics import pairwise_distances
 
@@ -162,7 +162,7 @@ def build_family_maps(records: Sequence[Mapping[str, Any]], table: pd.DataFrame,
     maps = _persistence.figure_directory(version_dir) / "maps"
     maps.mkdir(parents=True, exist_ok=True)
 
-    typical_example_rows: Dict[str, int] = {}
+    typical_example_rows: dict[str, int] = {}
     representative_dir = maps / "representative_families"
     if representative_dir.exists():
         shutil.rmtree(representative_dir)
@@ -221,7 +221,7 @@ def build_family_maps(records: Sequence[Mapping[str, Any]], table: pd.DataFrame,
         typical_example_rows[category] = typical_example
         fig, axes = plt.subplots(1, 3, figsize=(15, 4.2), squeeze=False)
         roles = ("representative example", "strongest example", "ambiguous example")
-        for ax, row_index, role in zip(axes.ravel(), selected, roles):
+        for ax, row_index, role in zip(axes.ravel(), selected, roles, strict=False):
             row = work.iloc[row_index]
             path = fold_paths.get(str(row["source_key"])) if fold_paths else None
             if path is not None and Path(path).exists():
@@ -229,13 +229,13 @@ def build_family_maps(records: Sequence[Mapping[str, Any]], table: pd.DataFrame,
             else:
                 ax.text(0.5, 0.5, "fold plot unavailable", ha="center", va="center",
                         transform=ax.transAxes)
-            ax.set_title("%s - %s" % (
+            ax.set_title("{} - {}".format(
                 category.replace("_", " ").title(), role), fontsize=9)
             ax.axis("off")
-        fig.suptitle("Representative %s examples (N=%d)" % (category, len(indices)), fontsize=13)
+        fig.suptitle(f'Representative {category!s} examples (N={int(len(indices)):d})', fontsize=13)
         fig.tight_layout(rect=(0, 0, 1, 0.93))
         fig.savefig(representative_dir /
-                    ("%s_representative_examples.png" % _utils.safe_name(category)), dpi=150)
+                    (f"{_utils.safe_name(category)}_representative_examples.png"), dpi=150)
         plt.close(fig)
 
         if category in strongest_lookup:
@@ -247,8 +247,7 @@ def build_family_maps(records: Sequence[Mapping[str, Any]], table: pd.DataFrame,
             else:
                 ax.text(0.5, 0.5, "fold plot unavailable", ha="center", va="center",
                         transform=ax.transAxes)
-            ax.set_title("%s (N=%d)\nstrongest validated evidence" % (
-                category.replace("_", " ").title(), len(indices)), fontsize=9)
+            ax.set_title('{!s} (N={:d})\nstrongest validated evidence'.format(category.replace("_", " ").title(), int(len(indices))), fontsize=9)
             ax.axis("off")
         if category in representative_lookup:
             ax = representative_lookup[category]
@@ -259,17 +258,16 @@ def build_family_maps(records: Sequence[Mapping[str, Any]], table: pd.DataFrame,
             else:
                 ax.text(0.5, 0.5, "fold plot unavailable", ha="center", va="center",
                         transform=ax.transAxes)
-            ax.set_title("%s (N=%d)\ncentral high-confidence real source" % (
-                category.replace("_", " ").title(), len(indices)), fontsize=9)
+            ax.set_title('{!s} (N={:d})\ncentral high-confidence real source'.format(category.replace("_", " ").title(), int(len(indices))), fontsize=9)
             ax.axis("off")
     for category, ax in strongest_lookup.items():
         if category not in present:
-            ax.text(0.5, 0.5, "%s\nno sources" % category, ha="center", va="center",
+            ax.text(0.5, 0.5, f"{category}\nno sources", ha="center", va="center",
                     transform=ax.transAxes)
             ax.axis("off")
     for category, ax in representative_lookup.items():
         if category not in present:
-            ax.text(0.5, 0.5, "%s\nno sources" % category, ha="center", va="center",
+            ax.text(0.5, 0.5, f"{category}\nno sources", ha="center", va="center",
                     transform=ax.transAxes)
             ax.axis("off")
     representative_fig.suptitle(
@@ -291,14 +289,14 @@ def build_family_maps(records: Sequence[Mapping[str, Any]], table: pd.DataFrame,
         "exotic_candidate_score", ascending=False).head(9)
     if not exotic.empty:
         fig, axes = plt.subplots(3, 3, figsize=(13.5, 12), squeeze=False)
-        for ax, (_, row) in zip(axes.ravel(), exotic.iterrows()):
+        for ax, (_, row) in zip(axes.ravel(), exotic.iterrows(), strict=False):
             path = fold_paths.get(str(row["source_key"])) if fold_paths else None
             if path is not None and Path(path).exists():
                 ax.imshow(plt.imread(str(path)))
             else:
                 ax.text(0.5, 0.5, "fold plot unavailable", ha="center", va="center",
                         transform=ax.transAxes)
-            ax.set_title("%s | %s | %.2f\n%s" % (
+            ax.set_title("{} | {} | {:.2f}\n{}".format(
                 row.get("source_id", ""), row.get("final_primary_tag", ""),
                 _utils.finite_float(row.get("exotic_candidate_score"), 0.0),
                 row.get("interest_reasons", "")), fontsize=8)
@@ -355,7 +353,7 @@ def map_only(config, args):
         raise SystemExit("Saved catalogue not found: " + str(catalogue))
     table = _loading.read_table(catalogue)
     if "dataset" in table:
-        print("Saved dataset names/counts: " + str(table["dataset"].value_counts().to_dict()))
+        _execution.log_info(__name__, "Saved dataset names/counts: " + str(table["dataset"].value_counts().to_dict()))
     colours = dict(S.CATEGORY_COLOURS)
     colours.update(config.get("category_colours", {}) or {})
     outline = bool(config.get("outline_new_sources", False))
@@ -364,15 +362,15 @@ def map_only(config, args):
     if args.no_outline_new:
         outline = False
     draw_overview_maps(table, state, config, colours, outline)
-    print("Redrawn saved overview maps: " + str(_persistence.figure_directory(state) / "maps"))
+    _execution.log_info(__name__, "Redrawn saved overview maps: " + str(_persistence.figure_directory(state) / "maps"))
     return {"version_dir": str(state), "n_sources": len(table)}
 
 
 def make_static_map(table: pd.DataFrame, x_col: str, y_col: str, title: str,
                     base_name: str, version_dir: Path, colours: Mapping[str, str],
                     outline_new: bool,
-                    highlights: Optional[Mapping[str, str]] = None,
-                    dataset_markers: Optional[Mapping[str, str]] = None) -> None:
+                    highlights: Mapping[str, str] | None = None,
+                    dataset_markers: Mapping[str, str] | None = None) -> None:
     if x_col not in table.columns or y_col not in table.columns:
         return
     plot_table = table.loc[np.isfinite(table[x_col]) & np.isfinite(table[y_col])]
@@ -402,7 +400,7 @@ def make_static_map(table: pd.DataFrame, x_col: str, y_col: str, title: str,
         # ARRAY of edgecolors when `c` is a single colour, so a per-point edge
         # array silently does nothing; and `color=` would override edgecolors
         # entirely. Both were verified against rendered output.
-        for mask, edgecolour, width in ((~latest, "none", 0.0), (latest, "black", 0.9)):
+        for mask, edgecolour, _width in ((~latest, "none", 0.0), (latest, "black", 0.9)):
             part = block.loc[mask.to_numpy()]
             if part.empty:
                 continue
@@ -419,16 +417,13 @@ def make_static_map(table: pd.DataFrame, x_col: str, y_col: str, title: str,
             continue
         handles.append(Line2D([0], [0], marker="o", linestyle="none",
                               color=colours.get(category, "#333333"),
-                              label="%s (N=%d; %.1f%%)" % (
-                                  category.replace("_", " ").title(),
-                                  int(counts.get(category, 0)),
-                                  100.0 * float(counts.get(category, 0)) / total)))
+                              label='{!s} (N={:d}; {:.1f}%)'.format(category.replace("_", " ").title(), int(int(counts.get(category, 0))), 100.0 * float(counts.get(category, 0)) / total)))
     if markers and "dataset" in plot_table:
         for dataset, count in plot_table["dataset"].astype(str).value_counts().sort_index().items():
             handles.append(Line2D([0], [0], linestyle="none",
                 marker=DATASET_MARKERS[markers.get(dataset, "circle")],
                 markerfacecolor="white", markeredgecolor="black", color="black",
-                label="Dataset: %s (N=%d)" % (dataset, count)))
+                label=f'Dataset: {dataset!s} (N={int(count):d})'))
     if outline_new and "is_latest_batch" in plot_table and _utils.bool_series(plot_table["is_latest_batch"]).any():
         handles.append(Line2D([0], [0], linestyle="none", marker="o",
             markerfacecolor="white", markeredgecolor="black", markeredgewidth=1.8,
@@ -472,12 +467,13 @@ def make_static_map(table: pd.DataFrame, x_col: str, y_col: str, title: str,
 def make_interactive_map(table: pd.DataFrame, x_col: str, y_col: str, title: str,
                          base_name: str, version_dir: Path, colours: Mapping[str, str],
                          outline_new: bool,
-                         highlights: Optional[Mapping[str, str]] = None,
-                    dataset_markers: Optional[Mapping[str, str]] = None) -> None:
+                         highlights: Mapping[str, str] | None = None,
+                    dataset_markers: Mapping[str, str] | None = None) -> None:
     """Self-contained Plotly map with source details and linked phase images."""
-    import os
     import html
+    import os
     from urllib.parse import quote
+
     import plotly.graph_objects as go
     maps = _persistence.figure_directory(version_dir) / 'maps'
     maps.mkdir(parents=True, exist_ok=True)
@@ -502,7 +498,7 @@ def make_interactive_map(table: pd.DataFrame, x_col: str, y_col: str, title: str
                                 html.escape(str(row.get('final_secondary_tags', ''))), link])
             latest = _utils.bool_series(subset['is_latest_batch']) if 'is_latest_batch' in subset else pd.Series(False, index=subset.index)
             chart.add_trace(go.Scatter(x=subset[x_col], y=subset[y_col], mode='markers',
-                name='%s (N=%d; %.1f%%)' % (category.replace('_', ' ').title(), len(subset), 100 * len(subset) / total),
+                name='{!s} (N={:d}; {:.1f}%)'.format(category.replace('_', ' ').title(), int(len(subset)), 100 * len(subset) / total),
                 legendgroup=dataset if markers else category,
                 legendgrouptitle_text=("Dataset: " + dataset) if markers else None,
                 customdata=details,
@@ -634,7 +630,7 @@ def build_category_appendix(table: pd.DataFrame, fold_paths: Mapping[str, Path],
         skipped = 0
         for page, start in enumerate(pages, start=1):
             chunk = ordered.iloc[start:start + per_page]
-            destination = out / ("%s_page%02d.png" % (_utils.safe_name(category), page))
+            destination = out / (f'{_utils.safe_name(category)!s}_page{int(page):02d}.png')
             if bool(config.get("_phase_fold_products_only", False))\
                     and destination.exists()\
                     and not bool(config.get("overwrite_existing_model", False)):
@@ -647,7 +643,7 @@ def build_category_appendix(table: pd.DataFrame, fold_paths: Mapping[str, Path],
                     skipped += 1
                     continue
             fig, axes = plt.subplots(rows, cols, figsize=(13.5, 12))
-            for ax, (_, row) in zip(axes.ravel(), chunk.iterrows()):
+            for ax, (_, row) in zip(axes.ravel(), chunk.iterrows(), strict=False):
                 path = fold_paths.get(str(row["source_key"]))
                 if path is not None and Path(path).exists():
                     ax.imshow(plt.imread(str(path)))
@@ -657,8 +653,7 @@ def build_category_appendix(table: pd.DataFrame, fold_paths: Mapping[str, Path],
                 ax.axis("off")
             for ax in axes.ravel()[len(chunk):]:
                 ax.axis("off")
-            fig.suptitle("%s - page %d of %d (ranked by strength)" % (
-                category, page, total_pages), fontsize=13)
+            fig.suptitle(f'{category!s} - page {int(page):d} of {int(total_pages):d} (ranked by strength)', fontsize=13)
             fig.tight_layout(rect=(0, 0, 1, 0.97))
             fig.savefig(destination, dpi=130)
             plt.close(fig)
@@ -668,18 +663,20 @@ def build_category_appendix(table: pd.DataFrame, fold_paths: Mapping[str, Path],
 
 
 def _plot_worker(cache_file: str, row: Mapping[str, Any], config: Mapping[str, Any],
-                 fold_path: str) -> Tuple[str, Optional[str]]:
+                 fold_path: str) -> tuple[str, str | None]:
     """Generate the sole fallback source plot when no LS plot exists."""
     if Path(fold_path).exists():
         return str(row.get("source_key", "")), fold_path
     try:
         record = joblib.load(cache_file)
-    except Exception:
+    except Exception as _caught_error:
+        _execution.report_exception(_caught_error, __name__)
         return str(row.get("source_key", "")), None
     try:
         create_fold_plot(record, row, Path(fold_path),
                          dpi=int(config.get("review_plot_dpi", 110)))
-    except Exception:
+    except Exception as _caught_error:
+        _execution.report_exception(_caught_error, __name__)
         return str(row.get("source_key", "")), None
     return str(row.get("source_key", "")), fold_path
 
@@ -687,7 +684,7 @@ def _plot_worker(cache_file: str, row: Mapping[str, Any], config: Mapping[str, A
 def generate_plots(records: Sequence[Mapping[str, Any]], table: pd.DataFrame,
                    version_dir: Path, config: Mapping[str, Any],
                    logger: logging.Logger,
-                   plot_index: Optional[Mapping[str, Path]] = None) -> Dict[str, Path]:
+                   plot_index: Mapping[str, Path] | None = None) -> dict[str, Path]:
     """Legacy cache-based phase renderer; never returns LS-periodogram paths.
 
     Normal production runs use :func:`generate_phase_fold_products` with raw
@@ -700,11 +697,11 @@ def generate_plots(records: Sequence[Mapping[str, Any]], table: pd.DataFrame,
     n_jobs = int(config.get("n_jobs", -1))
 
     jobs = []
-    resolved: Dict[str, Path] = {}
+    resolved: dict[str, Path] = {}
     for _, row in table.iterrows():
         key = str(row["source_key"])
         source_id = str(row.get("source_id", key))
-        phase_plot = phase_dir / ("%s__phase_fold.png" % _utils.safe_name(source_id, 50))
+        phase_plot = phase_dir / (f"{_utils.safe_name(source_id, 50)}__phase_fold.png")
         if phase_plot.exists():
             resolved[key] = phase_plot
             continue
@@ -729,7 +726,7 @@ def generate_plots(records: Sequence[Mapping[str, Any]], table: pd.DataFrame,
 
 def _phase_fold_plot_worker(source: Mapping[str, Any], row: Mapping[str, Any],
                             output_path: str, dpi: int, force: bool
-                            ) -> Tuple[str, Optional[str], Optional[str]]:
+                            ) -> tuple[str, str | None, str | None]:
     """Write a phase fold from the accepted filters without reclassification."""
     output = Path(output_path)
     key = str(row.get("source_key", ""))
@@ -753,12 +750,11 @@ def _phase_fold_plot_worker(source: Mapping[str, Any], row: Mapping[str, Any],
         temporary.replace(output)
         cache.record(output)
     except Exception as error:
+        _execution.report_exception(error, __name__)
         if temporary.exists():
-            try:
+            with contextlib.suppress(OSError):
                 temporary.unlink()
-            except OSError:
-                pass
-        return key, None, "phase_plot_failed: %s" % error
+        return key, None, f"phase_plot_failed: {error}"
     return key, str(output), None
 
 
@@ -766,19 +762,19 @@ def generate_phase_fold_products(sources: Mapping[str, Mapping[str, Any]],
                                  table: pd.DataFrame, version_dir: Path,
                                  config: Mapping[str, Any], logger: logging.Logger,
                                  force: bool = False
-                                 ) -> Tuple[Dict[str, Path], pd.DataFrame]:
+                                 ) -> tuple[dict[str, Path], pd.DataFrame]:
     """Generate/resume one accepted-band double-phase image per catalogue row."""
     output_dir = _persistence.figure_directory(version_dir) / "source_plots" / "phase_folded"
     output_dir.mkdir(parents=True, exist_ok=True)
     by_source_id = {str(source.get("source_id", key)): source
                     for key, source in sources.items()}
     jobs = []
-    resolved: Dict[str, Path] = {}
-    missing: List[Dict[str, Any]] = []
+    resolved: dict[str, Path] = {}
+    missing: list[dict[str, Any]] = []
     for _, row in table.iterrows():
         key = str(row.get("source_key", ""))
         source_id = str(row.get("source_id", key))
-        output = output_dir / ("%s__phase_fold.png" % _utils.safe_name(source_id, 50))
+        output = output_dir / (f"{_utils.safe_name(source_id, 50)}__phase_fold.png")
         # A completed source image is the per-source checkpoint.  Resolve it
         # before requiring raw data so interrupted and transform runs only
         # generate genuinely missing phase folds.
@@ -828,20 +824,19 @@ def generate_phase_fold_products(sources: Mapping[str, Mapping[str, Any]],
         "source_id", "source_key", "dataset", "reason"])
 
 
-def phase_fold_plot_only(config: Dict[str, Any], args: argparse.Namespace) -> Dict[str, Any]:
+def phase_fold_plot_only(config: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
     """Rebuild phase-based visual products while leaving every UMAP untouched."""
     output_root = Path(config["output_root"])
     _, version_dir = _persistence.resolve_version_dir(output_root, config.get("model_version"))
     if not version_dir.exists():
-        raise SystemExit("Model version directory not found: %s" % version_dir)
+        raise SystemExit(f"Model version directory not found: {version_dir}")
     logger = _utils.setup_logging(version_dir, args.verbose)
     table, catalogue_source = _loading.load_catalogue_for_plot_only(version_dir, logger)
     required = {"source_key", "source_id", "dataset", "final_primary_tag",
                 "recommended_period_days"}
     missing_columns = sorted(required - set(table.columns))
     if missing_columns:
-        raise SystemExit("Saved catalogue lacks plotting columns: %s" %
-                         ", ".join(missing_columns))
+        raise SystemExit("Saved catalogue lacks plotting columns: {}".format(", ".join(missing_columns)))
 
     # Record immutable UMAP product signatures before doing any plotting.
     umap_products = list((_persistence.figure_directory(version_dir) / "maps").glob("all_families_*umap.*"))
@@ -903,8 +898,7 @@ def phase_fold_plot_only(config: Dict[str, Any], args: argparse.Namespace) -> Di
                      if not path.exists()
                      or (path.stat().st_size, path.stat().st_mtime_ns) != signature]
     if changed_umaps:
-        raise AssertionError("Plot-only mode altered UMAP products: %s" %
-                             ", ".join(path.name for path in changed_umaps))
+        raise AssertionError("Plot-only mode altered UMAP products: {}".format(", ".join(path.name for path in changed_umaps)))
     logger.info("Plot-only regression passed: %d UMAP products and all saved labels/periods "
                 "are unchanged", len(umap_signatures))
     return {"version_dir": str(version_dir), "n_sources": len(table),
@@ -913,7 +907,7 @@ def phase_fold_plot_only(config: Dict[str, Any], args: argparse.Namespace) -> Di
 
 def _source_phase_plot_path(version_dir: Path, source_id: str) -> str:
     path = (_persistence.figure_directory(version_dir) / "source_plots" / "phase_folded" /
-            ("%s__phase_fold.png" % _utils.safe_name(source_id)))
+            (f"{_utils.safe_name(source_id)}__phase_fold.png"))
     return str(path) if path.exists() else ""
 
 
@@ -928,7 +922,7 @@ def make_neighbour_phase_grid(table: pd.DataFrame, source_keys: Sequence[str],
         neighbour_table["space"].eq("standardised_combined_feature_space")]
     details = {str(row["source_key"]): row for _, row in high.iterrows()}
     fig, axes = plt.subplots(3, 3, figsize=(15, 11.5), squeeze=False)
-    for panel, (ax, key) in enumerate(zip(axes.ravel(), source_keys[:9])):
+    for panel, (ax, key) in enumerate(zip(axes.ravel(), source_keys[:9], strict=False)):
         if key not in lookup.index:
             ax.axis("off")
             continue
@@ -950,13 +944,11 @@ def make_neighbour_phase_grid(table: pd.DataFrame, source_keys: Sequence[str],
             ax.text(0.5, 0.5, "light curve unavailable", ha="center", va="center",
                     transform=ax.transAxes)
         if panel == 0:
-            heading = "TARGET | %s | %s" % (source_id, row.get("final_primary_tag", ""))
+            heading = "TARGET | {} | {}".format(source_id, row.get("final_primary_tag", ""))
         else:
             detail = details.get(key, {})
-            heading = "NN %d | %s | %s | feature d=%.3g" % (
-                panel, source_id, row.get("final_primary_tag", ""),
-                _utils.finite_float(detail.get("distance"), np.nan))
-        ax.set_title("%s\nP%s = %.6g d" % (
+            heading = 'NN {:d} | {!s} | {!s} | feature d={:.3g}'.format(int(panel), source_id, row.get("final_primary_tag", ""), _utils.finite_float(detail.get("distance"), np.nan))
+        ax.set_title("{}\nP{} = {:.6g} d".format(
             heading,
             "" if period_factor == 1.0 else ("/2" if period_factor == 0.5 else "x2"),
             period), fontsize=8)
@@ -966,9 +958,8 @@ def make_neighbour_phase_grid(table: pd.DataFrame, source_keys: Sequence[str],
     if handles:
         fig.legend(handles, labels, loc="lower center", ncol=min(5, len(handles)), fontsize=7)
     factor_title = {0.5: "P/2", 1.0: "recommended P", 2.0: "2P"}.get(
-        period_factor, "%.3gP" % period_factor)
-    fig.suptitle("%s and nearest morphology neighbours - folded at %s" % (
-        source_label, factor_title), fontsize=14)
+        period_factor, f"{period_factor:.3g}P")
+    fig.suptitle(f"{source_label} and nearest morphology neighbours - folded at {factor_title}", fontsize=14)
     fig.tight_layout(rect=(0, 0.04, 1, 0.96))
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output, dpi=150)
@@ -985,7 +976,7 @@ def make_detached_family_map(table: pd.DataFrame, version_dir: Path,
     ax.scatter(background["combined_umap_1"], background["combined_umap_2"],
                s=18, c="#B8B8B8", alpha=0.22, edgecolors="none", zorder=1)
     handles = [Line2D([0], [0], marker="o", linestyle="none", color="#B8B8B8",
-                      label="Unassigned connected/uncertain body (N=%d)" % len(background))]
+                      label=f'Unassigned connected/uncertain body (N={int(len(background)):d})')]
     palette = plt.get_cmap("tab10")
     families = sorted(work.loc[assigned, family_column].unique())
     for index, family in enumerate(families):
@@ -994,8 +985,7 @@ def make_detached_family_map(table: pd.DataFrame, version_dir: Path,
         ax.scatter(block["combined_umap_1"], block["combined_umap_2"],
                    s=27, c=[colour], alpha=0.82, edgecolors="none", zorder=3 + index)
         handles.append(Line2D([0], [0], marker="o", linestyle="none", color=colour,
-                              label="%s (N=%d)" % (
-                                  family.replace("_", " ").title(), len(block))))
+                              label='{!s} (N={:d})'.format(family.replace("_", " ").title(), int(len(block)))))
     ax.set_xlabel("UMAP 1")
     ax.set_ylabel("UMAP 2")
     ax.set_title("Detached density families in the frozen combined UMAP")

@@ -1,25 +1,29 @@
 from __future__ import annotations
+
 import warnings
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
+
 import numpy as np
 import pandas as pd
+
+from .. import execution as _execution
 from . import settings as S
 from . import utils as _utils
-
-
-
 
 # ===========================================================================
 # CLASSIFICATION
 # ===========================================================================
 
 
-def category_scores(row: Mapping[str, Any], config: Mapping[str, Any]) -> Dict[str, float]:
+def category_scores(row: Mapping[str, Any], config: Mapping[str, Any]) -> dict[str, float]:
     """Continuous morphology evidence, independent of assigned labels."""
     t = config.get("thresholds", {})
-    F = lambda key, default=np.nan: _utils.finite_float(row.get(key), default)
-    clip = lambda value: float(np.clip(value, 0.0, 1.0))
+    def F(key, default=np.nan):
+        return _utils.finite_float(row.get(key), default)
+    def clip(value):
+        return float(np.clip(value, 0.0, 1.0))
     gate = float(t.get("periodic_chi2", 5.0))
     strong = float(t.get("periodic_chi2_strong", 25.0))
     periodic = clip((F("profile_chi2", 0.0) - gate) / max(strong - gate, 1e-9))
@@ -66,11 +70,11 @@ def category_scores(row: Mapping[str, Any], config: Mapping[str, Any]) -> Dict[s
 
 
 def suggest_morphology(row: Mapping[str, Any], metadata: Mapping[str, Any],
-                       config: Mapping[str, Any]) -> Dict[str, Any]:
+                       config: Mapping[str, Any]) -> dict[str, Any]:
     """Assign morphology first, then independently assess scientific interest."""
     t = config.get("thresholds", {})
-    tags: List[str] = list(_utils.split_tags(row.get("diagnostic_tags", "")))
-    review: List[str] = []
+    tags: list[str] = list(_utils.split_tags(row.get("diagnostic_tags", "")))
+    review: list[str] = []
 
     def F(key, default=np.nan):
         return _utils.finite_float(row.get(key), default)
@@ -86,7 +90,7 @@ def suggest_morphology(row: Mapping[str, Any], metadata: Mapping[str, Any],
         tags.append("alias_period")
         review.append("period_on_one_day_alias")
     symmetry, peaks = F("mirror_symmetry", 0.0), int(F("profile_peak_count", 1))
-    dip_sig, dip_dom = F("dip_significance", 0.0), F("dip_dominance", 1.0)
+    dip_sig, _dip_dom = F("dip_significance", 0.0), F("dip_dominance", 1.0)
     duty, dim_score = F("dip_duty_cycle", 1.0), scores["score_transit"]
     support_cycles = int(F("dip_supporting_cycles", 0.0))
     support_fraction = F("dip_cycle_support_fraction", 0.0)
@@ -100,7 +104,7 @@ def suggest_morphology(row: Mapping[str, Any], metadata: Mapping[str, Any],
     evolution, temporal = F("evolution_raw_score", 0.0), F("temporal_coherence_score", 0.0)
     ls_ratio, ood = F("ls_peak_ratio", 0.0), F("out_of_distribution_score", 0.0)
     chi2_gate = float(t.get("periodic_chi2", 5.0))
-    chi2_strong = float(t.get("periodic_chi2_strong", 25.0))
+    float(t.get("periodic_chi2_strong", 25.0))
     snr_gate = float(t.get("periodic_snr", 6.0))
     min_coverage = float(config.get("minimum_phase_coverage", 0.30))
     periodic = (np.isfinite(period) and chi2 >= chi2_gate and psnr >= snr_gate
@@ -201,13 +205,11 @@ def suggest_morphology(row: Mapping[str, Any], metadata: Mapping[str, Any],
         review.append("transit_wave_ambiguous")
 
     if poor:
-        primary, rule = "noisy", "median err %.2f mag with amplitude %.2f: cannot support a shape" % (
-            med_err, amplitude)
+        primary, rule = "noisy", f"median err {med_err:.2f} mag with amplitude {amplitude:.2f}: cannot support a shape"
         tags.append("low_snr_photometry")
     elif transit_eligible and (not ambiguous or scores["score_transit"] >= scores["score_wavelike"]):
         primary = "transit"
-        rule = "coherent dimming score=%.2f; %d/%d cycles; %d sections" % (
-            dim_score, support_cycles, int(F("dip_covered_cycles", 0)), support_sections)
+        rule = 'coherent dimming score={:.2f}; {:d}/{:d} cycles; {:d} sections'.format(dim_score, int(support_cycles), int(int(F("dip_covered_cycles", 0))), int(support_sections))
         if duty <= 0.16:
             tags.append("narrow_eclipse")
         else:
@@ -232,7 +234,7 @@ def suggest_morphology(row: Mapping[str, Any], metadata: Mapping[str, Any],
         rule = "wave and dimming held-out scores are similarly supported"
     elif wave_like or periodic_brightening:
         primary = "wavelike"
-        rule = "coherent wave: chi2=%.1f LS ratio=%.1f" % (chi2, ls_ratio)
+        rule = f"coherent wave: chi2={chi2:.1f} LS ratio={ls_ratio:.1f}"
         if periodic_brightening:
             tags.append("periodic_brightening")
         if np.isfinite(symmetry) and symmetry < float(t.get("symmetry_min_correlation", 0.97)):
@@ -260,7 +262,7 @@ def suggest_morphology(row: Mapping[str, Any], metadata: Mapping[str, Any],
         tags.append("unresolved_dimming")
         review.append("dimming_without_repeatability")
     elif scat_err > float(t.get("noisy_min_scatter_over_error", 4.0)):
-        primary, rule = "noisy", "no coherent shape and extreme scatter: scatter/err=%.1f" % scat_err
+        primary, rule = "noisy", f"no coherent shape and extreme scatter: scatter/err={scat_err:.1f}"
     elif chi2 < chi2_gate and temporal < 0.25:
         primary, rule = "nonvar", "no significant periodic or time-domain variability"
     else:
@@ -269,7 +271,7 @@ def suggest_morphology(row: Mapping[str, Any], metadata: Mapping[str, Any],
 
     ordered_scores = sorted(scores.values(), reverse=True)
     margin = ordered_scores[0] - ordered_scores[1] if len(ordered_scores) > 1 else ordered_scores[0]
-    primary_score = scores.get("score_%s" % primary, 0.0)
+    primary_score = scores.get(f"score_{primary}", 0.0)
     conf = 0.35 + 0.35 * primary_score + 0.30 * np.clip(margin / 0.5, 0.0, 1.0)
     if primary == "transit":
         conf = 0.30 + 0.35 * dim_score + 0.15 * np.clip(support_cycles / 5.0, 0, 1)\
@@ -292,8 +294,8 @@ def suggest_morphology(row: Mapping[str, Any], metadata: Mapping[str, Any],
 
     # Scientific interest is a separate decision. Every exotic reason below
     # requires positive astrophysical structure plus quality/repeatability.
-    exotic_reasons: List[str] = []
-    exotic_components: List[float] = []
+    exotic_reasons: list[str] = []
+    exotic_components: list[float] = []
     credible_quality = not poor and not poor_point_driven and not seasonal and not gappy
     if primary == "transit" and double_dip and credible_quality and transit_repeatable:
         exotic_reasons.append("unusual_repeating_double_dip")
@@ -404,7 +406,7 @@ def suggest_morphology(row: Mapping[str, Any], metadata: Mapping[str, Any],
     }
 
 
-def load_manual_labels(path: Optional[Path]) -> pd.DataFrame:
+def load_manual_labels(path: Path | None) -> pd.DataFrame:
     empty = pd.DataFrame(columns=list(S.MANUAL_LABEL_COLUMNS))
     if path is None or not Path(path).exists():
         return empty
@@ -460,10 +462,10 @@ def apply_labels(table: pd.DataFrame, manual: pd.DataFrame) -> pd.DataFrame:
             legacy_exotic = any(value.lower() == "exotic" for value in primary_tokens)
             if legacy_exotic:
                 warnings.warn(
-                    "Legacy manual primary label 'exotic' for source %s was converted "
+                    "Legacy manual primary label 'exotic' for source {} was converted "
                     "to manual_interest_status=manually_confirmed_exotic; primary "
-                    "morphology is %s." % (row["source_id"], primary or "unknown"),
-                    UserWarning)
+                    "morphology is {}.".format(row["source_id"], primary or "unknown"),
+                    UserWarning, stacklevel=2)
                 table.at[index, "manual_interest_status"] = "manually_confirmed_exotic"
                 if not primary:
                     primary = "unknown"
@@ -479,7 +481,7 @@ def apply_labels(table: pd.DataFrame, manual: pd.DataFrame) -> pd.DataFrame:
         table["manual_primary_tag"], table["suggested_primary_tag"])
     table["final_secondary_tags"] = [
         _utils.join_tags(_utils.split_tags(a) + _utils.split_tags(b))
-        for a, b in zip(table["suggested_secondary_tags"], table["manual_secondary_tags"])]
+        for a, b in zip(table["suggested_secondary_tags"], table["manual_secondary_tags"], strict=False)]
     table["label_source"] = np.where(
         table["manual_primary_tag"].astype(str).str.len() > 0, "manual", "automatic")
     table["final_confidence"] = np.where(
@@ -517,7 +519,7 @@ def classification_evidence_matrix(table: pd.DataFrame) -> np.ndarray:
 def flare_event_validation_table(records: Sequence[Mapping[str, Any]], table: pd.DataFrame,
                                  version_dir: Path) -> pd.DataFrame:
     """Merge per-event audit rows, preserving carried transform sources."""
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     replacement_keys: set = set()
     for record in records:
         summary = record.get("summary", {})
@@ -539,7 +541,8 @@ def flare_event_validation_table(records: Sequence[Mapping[str, Any]], table: pd
                 previous = previous.loc[
                     ~previous["source_key"].astype(str).isin(replacement_keys)]
                 current = pd.concat([previous, current], ignore_index=True, sort=False)
-        except Exception:
+        except Exception as _caught_error:
+            _execution.report_exception(_caught_error, __name__)
             pass
     if current.empty:
         return pd.DataFrame(columns=[

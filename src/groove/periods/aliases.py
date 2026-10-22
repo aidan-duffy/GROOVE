@@ -1,16 +1,18 @@
 from __future__ import annotations
+
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
 import numpy as np
 import pandas as pd
-from . import settings as S
+
+from .. import execution as _execution
 from . import folding as _folding
 from . import loading as _loading
 from . import periodograms as _periodograms
+from . import settings as S
 from . import validation as _validation
-
-
 
 
 # =============================================================================
@@ -103,8 +105,10 @@ def build_field_alias_inventory(summary: pd.DataFrame, series: str | None = None
     work = work.dropna(subset=["ra_deg", "dec_deg"])
     if work.empty:
         if series != "auto":
-            print(f"  [warning] No {series} rows available for field alias learning; "
-                  "use alias_learning_series: auto for O/C-only runs.")
+            _execution.log_info(__name__,
+                f"  [warning] No {series} rows available for field alias learning; "
+                "use alias_learning_series: auto for O/C-only runs."
+            )
         return pd.DataFrame()
 
     stars: list[dict[str, Any]] = []
@@ -114,9 +118,15 @@ def build_field_alias_inventory(summary: pd.DataFrame, series: str | None = None
         metadata = chosen.iloc[0]
         peaks = []
         for value in chosen["ls_top_periods_days"]:
-            peaks.extend(_loading.parse_float_list(value)[:S.MAX_PEAKS_FOR_FIELD_LEARNING])
-        stars.append({"source_id": source_id, "ra_deg": metadata["ra_deg"],
-                      "dec_deg": metadata["dec_deg"], "learning_peaks": peaks})
+            peaks.extend(_loading.parse_float_list(value)[: S.MAX_PEAKS_FOR_FIELD_LEARNING])
+        stars.append(
+            {
+                "source_id": source_id,
+                "ra_deg": metadata["ra_deg"],
+                "dec_deg": metadata["dec_deg"],
+                "learning_peaks": peaks,
+            }
+        )
     work = pd.DataFrame(stars)
 
     work["ra_bin"] = np.floor(work["ra_deg"].astype(float) / S.FIELD_BIN_DEG).astype(int)
@@ -162,7 +172,8 @@ def load_reference_summaries() -> pd.DataFrame:
             if p.exists():
                 frames.append(pd.read_csv(p, dtype={"source_id": str}, low_memory=False))
         except Exception as exc:
-            print(f"  [warning] Could not read reference summary {path}: {exc}")
+            _execution.report_exception(exc, __name__)
+            _execution.log_info(__name__, f"  [warning] Could not read reference summary {path}: {exc}")
     return pd.concat(frames, ignore_index=True, sort=False) if frames else pd.DataFrame()
 
 
@@ -172,7 +183,8 @@ def load_alias_memory() -> pd.DataFrame:
         try:
             return pd.read_csv(path, dtype=str, low_memory=False)
         except Exception as exc:
-            print(f"  [warning] Could not read alias memory {path}: {exc}")
+            _execution.report_exception(exc, __name__)
+            _execution.log_info(__name__, f"  [warning] Could not read alias memory {path}: {exc}")
     return pd.DataFrame()
 
 
@@ -196,7 +208,9 @@ def merge_alias_inventories(*inventories: pd.DataFrame) -> pd.DataFrame:
             used[mask] = True
             members = periods[mask]
             sub = group.iloc[np.flatnonzero(mask)] if len(group) == len(periods) else group
-            n_stars = pd.to_numeric(sub.get("n_stars_in_field", pd.Series(dtype=float)), errors="coerce").fillna(0).sum()
+            n_stars = (
+                pd.to_numeric(sub.get("n_stars_in_field", pd.Series(dtype=float)), errors="coerce").fillna(0).sum()
+            )
             n_hit = pd.to_numeric(sub.get("n_stars_hit", pd.Series(dtype=float)), errors="coerce").fillna(0).sum()
             frac = float(n_hit / n_stars) if n_stars > 0 else np.nan
             merged_rows.append(
@@ -242,14 +256,21 @@ def field_alias_match(period: float, ra_deg: float, dec_deg: float, inventory: p
     }
 
 
-def alias_diagnostics(period: float, time: np.ndarray, ra_deg: float, dec_deg: float, inventory: pd.DataFrame) -> dict[str, Any]:
+def alias_diagnostics(
+    period: float, time: np.ndarray, ra_deg: float, dec_deg: float, inventory: pd.DataFrame
+) -> dict[str, Any]:
     universal = universal_alias_match(period)
     field = field_alias_match(period, ra_deg, dec_deg, inventory)
     window = _periodograms.spectral_window_power(time, 1.0 / period) if np.isfinite(period) and period > 0 else np.nan
     universal_score = 1.0 if universal else 0.0
     field_score = 1.0 if field["field_alias_hit"] else 0.0
     window_score = min(max(window if np.isfinite(window) else 0.0, 0.0), 1.0)
-    score = min(1.0, 0.55 * universal_score + 0.55 * field_score + 0.35 * window_score)
+    score = min(
+        1.0,
+        S.ALIAS_WEIGHT_UNIVERSAL * universal_score
+        + S.ALIAS_WEIGHT_FIELD * field_score
+        + S.ALIAS_WEIGHT_WINDOW * window_score,
+    )
     labels = []
     if universal:
         labels.append(f"universal:{universal}")
@@ -271,7 +292,9 @@ def alias_diagnostics(period: float, time: np.ndarray, ra_deg: float, dec_deg: f
 # =============================================================================
 # APPLY ALIAS MEMORY TO ROWS / PEAKS
 # =============================================================================
-def annotate_aliases_and_choose_series_period(summary_rows: list[dict[str, Any]], peak_rows_all: list[dict[str, Any]], inventory: pd.DataFrame) -> None:
+def annotate_aliases_and_choose_series_period(
+    summary_rows: list[dict[str, Any]], peak_rows_all: list[dict[str, Any]], inventory: pd.DataFrame
+) -> None:
     peaks_df = pd.DataFrame(peak_rows_all)
     if peaks_df.empty:
         return
@@ -297,7 +320,7 @@ def annotate_aliases_and_choose_series_period(summary_rows: list[dict[str, Any]]
         # saved window if available only for raw. Peak rows get universal+field.
         peaks = group.sort_values("rank").copy()
         scored_peaks: list[dict[str, Any]] = []
-        top_power = _loading.safe_float(row.get("raw_ls_best_power"), np.nan)
+        _loading.safe_float(row.get("raw_ls_best_power"), np.nan)
         for _, prow in peaks.iterrows():
             p = _loading.safe_float(prow.get("period_days"), np.nan)
             field = field_alias_match(p, ra, dec, inventory)
@@ -308,9 +331,9 @@ def annotate_aliases_and_choose_series_period(summary_rows: list[dict[str, Any]]
                 window_score = min(max(raw_win if np.isfinite(raw_win) else 0.0, 0.0), 1.0)
             score = min(
                 1.0,
-                0.50 * (1.0 if universal else 0.0)
-                + 0.50 * (1.0 if field["field_alias_hit"] else 0.0)
-                + 0.35 * window_score,
+                S.ALIAS_WEIGHT_UNIVERSAL * (1.0 if universal else 0.0)
+                + S.ALIAS_WEIGHT_FIELD * (1.0 if field["field_alias_hit"] else 0.0)
+                + S.ALIAS_WEIGHT_WINDOW * window_score,
             )
             scored_peaks.append(
                 {
@@ -319,7 +342,17 @@ def annotate_aliases_and_choose_series_period(summary_rows: list[dict[str, Any]]
                     "power": _loading.safe_float(prow.get("power"), np.nan),
                     "power_fraction": _loading.safe_float(prow.get("power_fraction_of_best"), np.nan),
                     "alias_score": score,
-                    "alias_labels": ";".join([x for x in [f"universal:{universal}" if universal else "", f"field:{field['field_alias_period']:.6g}d" if field["field_alias_hit"] else "", "window" if window_score >= S.WINDOW_POWER_WARNING else ""] if x]),
+                    "alias_labels": ";".join(
+                        [
+                            x
+                            for x in [
+                                f"universal:{universal}" if universal else "",
+                                f"field:{field['field_alias_period']:.6g}d" if field["field_alias_hit"] else "",
+                                "window" if window_score >= S.WINDOW_POWER_WARNING else "",
+                            ]
+                            if x
+                        ]
+                    ),
                     "is_alias": bool(score >= S.ALIAS_SCORE_THRESHOLD),
                 }
             )
@@ -344,12 +377,16 @@ def annotate_aliases_and_choose_series_period(summary_rows: list[dict[str, Any]]
         if original["is_alias"] and replacement is not None:
             chosen = replacement
             row["alias_correction_applied"] = True
-            row["alias_correction_note"] = f"promoted rank-{replacement['rank']} non-alias peak over alias-like raw peak ({original['alias_labels']})"
+            row["alias_correction_note"] = (
+                f"promoted rank-{replacement['rank']} non-alias peak over alias-like raw peak ({original['alias_labels']})"
+            )
         else:
             chosen = original
             row["alias_correction_applied"] = False
             if original["is_alias"]:
-                row["alias_correction_note"] = "raw peak alias-like but no strong non-alias replacement; kept and flagged"
+                row["alias_correction_note"] = (
+                    "raw peak alias-like but no strong non-alias replacement; kept and flagged"
+                )
             else:
                 row["alias_correction_note"] = "raw peak not alias-like; kept"
         row["raw_alias_score"] = original["alias_score"]
@@ -409,12 +446,14 @@ def find_2p_peak_support(
                 best = row
     if best is not None:
         frac = _loading.safe_float(best.get("power_fraction_of_best"), np.nan)
-        out.update({
-            "top_peak_2p_period_days": _loading.safe_float(best.get("period_days"), np.nan),
-            "top_peak_2p_rank": int(_loading.safe_float(best.get("rank"), np.nan)),
-            "top_peak_2p_power_fraction": frac,
-            "top_peak_2p_present": bool(np.isfinite(frac) and frac >= S.HARMONIC_2P_PEAK_MIN_POWER_FRACTION),
-        })
+        out.update(
+            {
+                "top_peak_2p_period_days": _loading.safe_float(best.get("period_days"), np.nan),
+                "top_peak_2p_rank": int(_loading.safe_float(best.get("rank"), np.nan)),
+                "top_peak_2p_power_fraction": frac,
+                "top_peak_2p_present": bool(np.isfinite(frac) and frac >= S.HARMONIC_2P_PEAK_MIN_POWER_FRACTION),
+            }
+        )
     return out
 
 
@@ -435,7 +474,7 @@ def update_post_alias_harmonics(
         for r in summary_rows
         if str(r.get("status")) == "ok"
     }
-    for metadata, prepared, _old_row, payload, catalogue_period in plot_payloads:
+    for metadata, prepared, _old_row, _payload, catalogue_period in plot_payloads:
         key = (str(metadata.get("file")), str(metadata.get("source_id")), str(prepared.get("series_name")))
         row = row_lookup.get(key)
         if row is None:
@@ -449,40 +488,43 @@ def update_post_alias_harmonics(
 
         fold = _folding.fold_coherence_metrics(prepared["time"], prepared["signal"], prepared["error"], period)
         oe = _folding.odd_even_2p_test(prepared["time"], prepared["signal"], prepared["error"], period)
-        mh = _periodograms.multiharmonic_2p_test(prepared["time"], prepared["signal"], prepared["error"], period, baseline)
+        mh = _periodograms.multiharmonic_2p_test(
+            prepared["time"], prepared["signal"], prepared["error"], period, baseline
+        )
         peak2p = find_2p_peak_support(peak_rows_all, key[0], key[1], key[2], period)
         cat_match_series = _validation.catalogue_match(period, _loading.safe_float(catalogue_period, np.nan))
-        cat_match_2p = _validation.catalogue_match(2.0 * period if np.isfinite(period) else np.nan, _loading.safe_float(catalogue_period, np.nan))
+        cat_match_2p = _validation.catalogue_match(
+            2.0 * period if np.isfinite(period) else np.nan, _loading.safe_float(catalogue_period, np.nan)
+        )
         validation_catalogue_is_2p = bool(
-            S.USE_CATALOGUE_FOR_VALIDATION_REVIEW_FLAGS
-            and cat_match_series == "P/2"
-            and cat_match_2p == "direct"
+            S.USE_CATALOGUE_FOR_VALIDATION_REVIEW_FLAGS and cat_match_series == "P/2" and cat_match_2p == "direct"
         )
 
-        row.update({
-            "post_alias_fold_valid_bins": fold["fold_valid_bins"],
-            "post_alias_fold_amplitude": fold["fold_amplitude"],
-            "post_alias_fold_amp_snr": fold["fold_amp_snr"],
-            "post_alias_fold_scatter_reduction": fold["fold_scatter_reduction"],
-            **oe,
-            **mh,
-            **peak2p,
-            "series_catalogue_match_after_alias": cat_match_series,
-            "series_2p_catalogue_match_after_alias": cat_match_2p,
-            "validation_catalogue_is_2p_of_series": validation_catalogue_is_2p,
-            "series_harmonic_review_needed": bool(
-                oe.get("two_p_supported", False)
-                or mh.get("mh_2p_supported", False)
-                or peak2p.get("top_peak_2p_present", False)
-                or validation_catalogue_is_2p
-            ),
-        })
+        row.update(
+            {
+                "post_alias_fold_valid_bins": fold["fold_valid_bins"],
+                "post_alias_fold_amplitude": fold["fold_amplitude"],
+                "post_alias_fold_amp_snr": fold["fold_amp_snr"],
+                "post_alias_fold_scatter_reduction": fold["fold_scatter_reduction"],
+                **oe,
+                **mh,
+                **peak2p,
+                "series_catalogue_match_after_alias": cat_match_series,
+                "series_2p_catalogue_match_after_alias": cat_match_2p,
+                "validation_catalogue_is_2p_of_series": validation_catalogue_is_2p,
+                "series_harmonic_review_needed": bool(
+                    oe.get("two_p_supported", False)
+                    or mh.get("mh_2p_supported", False)
+                    or peak2p.get("top_peak_2p_present", False)
+                    or validation_catalogue_is_2p
+                ),
+            }
+        )
 
 
-
-
-
-def update_post_alias_harmonics_from_peaks(summary_rows: list[dict[str, Any]], peak_rows_all: list[dict[str, Any]]) -> None:
+def update_post_alias_harmonics_from_peaks(
+    summary_rows: list[dict[str, Any]], peak_rows_all: list[dict[str, Any]]
+) -> None:
     """Lightweight post-alias harmonic review using only saved top peaks.
 
     This is used in large-run mode where full arrays are not kept in memory.
@@ -526,12 +568,12 @@ def update_post_alias_harmonics_from_peaks(summary_rows: list[dict[str, Any]], p
 
 
 def source_is_alias_suspect(source_info: dict[str, Any]) -> bool:
-    primary = str(source_info.get(
-        "primary_classification", source_info.get("source_primary_classification", "")
-    )).lower()
-    secondary = str(source_info.get(
-        "secondary_classification", source_info.get("source_secondary_classification", "")
-    )).lower()
+    primary = str(
+        source_info.get("primary_classification", source_info.get("source_primary_classification", ""))
+    ).lower()
+    secondary = str(
+        source_info.get("secondary_classification", source_info.get("source_secondary_classification", ""))
+    ).lower()
     warnings = str(source_info.get("warning_flags", "")).lower()
     alias_flags = str(source_info.get("alias_flags", "")).lower()
     return bool(
@@ -545,12 +587,12 @@ def source_is_alias_suspect(source_info: dict[str, Any]) -> bool:
 
 
 def source_is_harmonic_suspect(source_info: dict[str, Any]) -> bool:
-    primary = str(source_info.get(
-        "primary_classification", source_info.get("source_primary_classification", "")
-    )).lower()
-    secondary = str(source_info.get(
-        "secondary_classification", source_info.get("source_secondary_classification", "")
-    )).lower()
+    primary = str(
+        source_info.get("primary_classification", source_info.get("source_primary_classification", ""))
+    ).lower()
+    secondary = str(
+        source_info.get("secondary_classification", source_info.get("source_secondary_classification", ""))
+    ).lower()
     warnings = str(source_info.get("warning_flags", "")).lower()
     status = str(source_info.get("harmonic_status", "")).lower()
     return bool(

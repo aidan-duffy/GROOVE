@@ -93,7 +93,7 @@ python -m groove demo-check demo_extended_104
 
 Run one stage at a time and inspect its outputs. This has 24 artificial sources:
 the original 12 plus a daily systematic mixed with a wave, nightly sampling of
-an 84.5-day wave, unequal eclipses, repeated flares, irregular dips, an evolving
+an 73.6-day wave, unequal eclipses, repeated flares, irregular dips, an evolving
 wave, noisy measurements, a cyan-only wave and an orange-only wave, a single isolated dip and an offset double-dip signal, and a stronger-secondary-peak alias-recovery case.
 Read `CASE_GUIDE.md`, `truth.csv`, `demo_check.json` and `demo_source_review.csv`.
 Input behaviours are not forced classifier labels. Inspect any classifier
@@ -101,7 +101,7 @@ mismatch rather than modifying thresholds simply to populate every category.
 The flare/dip/evolving/noisy cases need visual and feature review; they are not
 an unbiased performance benchmark.
 
-Both one-day systematic cases should trigger automatic alias folds. In alias_promoted (ID 3216489845356186519), the rank-one daily peak is replaced by rank two near 8.3 days. The original weaker-secondary case stays flagged. The unequal
+Both one-day systematic cases should trigger automatic alias folds. In alias_promoted (ID 9900000000000000023), the rank-one daily peak is replaced by rank two near 8.3 days. The original weaker-secondary case stays flagged. The unequal
 binary should trigger harmonic folds. Nightly sampling can produce competing
 daily side peaks even when the true period is retained. Being near a daily
 alias does not mean a real signal must be discarded. BLS is enabled as a
@@ -148,7 +148,7 @@ Use the same reference configuration. Its model version is extended_demo.
 python -m groove morphology -c demo_extended_104/run.yaml -- --mode classify
 python -m groove morphology -c demo_extended_104/run.yaml -- --mode plot-only
 python -m groove morphology -c demo_extended_104/run.yaml -- \
-  --mode highlight-source --source-id 3216489845356186515 \
+  --mode highlight-source --source-id 9900000000000000019 \
   --label cyan_demo --diagnostic-folds
 python -m groove morphology -c demo_extended_104/run.yaml -- \
   --mode refit --model-version refit_review

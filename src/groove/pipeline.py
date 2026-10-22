@@ -2,14 +2,15 @@
 settings module from the YAML and calls that stage's `run.main()`."""
 from __future__ import annotations
 
-import json
 import importlib
 from pathlib import Path
 
 import yaml
 
+from . import execution as _execution
 from .config import Config, apply_overrides
-from .resume import resumable, atomic_json
+from .resume import atomic_json, resumable
+
 
 def _reset(settings):
     # One process can run several configs; no overrides may leak between them.
@@ -25,12 +26,13 @@ STAGES = ("download", "clean", "select", "periods", "morphology")
 
 
 def _banner(cfg: Config, stage: str) -> None:
-    print(f"\n### groove {stage}  |  {cfg.name}  |  {cfg.output_folder}\n")
+    _execution.log_info(__name__, f"\n### groove {stage}  |  {cfg.name}  |  {cfg.output_folder}\n")
 
 
 @resumable("download")
 def run_download(cfg: Config, dry_run: bool = False, limit: int | None = None, rerun: bool = False) -> int:
-    from .download import settings as S, run
+    from .download import run
+    from .download import settings as S
     _reset(S)
     _banner(cfg, "download")
     if cfg.targets is None:
@@ -56,7 +58,8 @@ def run_download(cfg: Config, dry_run: bool = False, limit: int | None = None, r
 
 @resumable("clean")
 def run_clean(cfg: Config, rerun: bool = False) -> None:
-    from .clean import settings as S, run
+    from .clean import run
+    from .clean import settings as S
     _reset(S)
     _banner(cfg, "clean")
     S.INPUT_DIR = cfg.raw_lightcurves
@@ -69,7 +72,8 @@ def run_clean(cfg: Config, rerun: bool = False) -> None:
 
 @resumable("select")
 def run_select(cfg: Config, rerun: bool = False) -> None:
-    from .select import settings as S, run
+    from .select import run
+    from .select import settings as S
     _reset(S)
     _banner(cfg, "select")
     S.CLEANED_DIR = cfg.clean_dir
@@ -81,7 +85,8 @@ def run_select(cfg: Config, rerun: bool = False) -> None:
 
 @resumable("periods")
 def run_periods(cfg: Config, rerun: bool = False) -> None:
-    from .periods import settings as S, run
+    from .periods import run
+    from .periods import settings as S
     _reset(S)
     _banner(cfg, "periods")
     S.INPUT_DIR = cfg.selected_dir

@@ -1,17 +1,20 @@
 from __future__ import annotations
+
+import contextlib
 import json
 import logging
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
+
 import joblib
 import numpy as np
 import pandas as pd
-from . import settings as S
+
+from .. import execution as _execution
 from . import features as _features
+from . import settings as S
 from . import utils as _utils
-
-
-
 
 # ===========================================================================
 # TABLES AND MODEL IO
@@ -50,15 +53,15 @@ def save_models(version_dir: Path, block: str, models: Mapping[str, Any]) -> Non
             "feature_weight_interpretation", "selected_settings",
             "category_score_columns")
     joblib.dump({k: models[k] for k in keys if k in models},
-                path / ("%s_representation.joblib" % block))
+                path / (f"{block}_representation.joblib"))
     if "ood" in models:
-        joblib.dump(models["ood"], path / ("%s_ood.joblib" % block))
+        joblib.dump(models["ood"], path / (f"{block}_ood.joblib"))
 
 
-def load_models(version_dir: Path, block: str) -> Dict[str, Any]:
+def load_models(version_dir: Path, block: str) -> dict[str, Any]:
     path = Path(version_dir) / "models"
-    models = joblib.load(path / ("%s_representation.joblib" % block))
-    ood_path = path / ("%s_ood.joblib" % block)
+    models = joblib.load(path / (f"{block}_representation.joblib"))
+    ood_path = path / (f"{block}_ood.joblib")
     if ood_path.exists():
         models["ood"] = joblib.load(ood_path)
     return models
@@ -71,7 +74,7 @@ def save_combined_validation_space(version_dir: Path, keys: Sequence[str],
                 Path(version_dir) / "models" / "combined_validation_space.joblib")
 
 
-def load_combined_validation_space(version_dir: Path) -> Tuple[List[str], Optional[np.ndarray]]:
+def load_combined_validation_space(version_dir: Path) -> tuple[list[str], np.ndarray | None]:
     path = Path(version_dir) / "models" / "combined_validation_space.joblib"
     if not path.exists():
         return [], None
@@ -79,13 +82,13 @@ def load_combined_validation_space(version_dir: Path) -> Tuple[List[str], Option
     return list(payload.get("source_keys", [])), np.asarray(payload.get("model_space"), dtype=float)
 
 
-def merge_validation_space(old_keys: Sequence[str], old_space: Optional[np.ndarray],
+def merge_validation_space(old_keys: Sequence[str], old_space: np.ndarray | None,
                            new_keys: Sequence[str], new_space: np.ndarray
-                           ) -> Tuple[List[str], np.ndarray]:
+                           ) -> tuple[list[str], np.ndarray]:
     replacements = {str(key): np.asarray(new_space[index], dtype=float)
                     for index, key in enumerate(new_keys)}
-    keys: List[str] = []
-    rows: List[np.ndarray] = []
+    keys: list[str] = []
+    rows: list[np.ndarray] = []
     if old_space is not None:
         for index, key in enumerate(old_keys):
             token = str(key)
@@ -130,7 +133,7 @@ def save_finalisation_checkpoint(version_dir: Path, payload: Mapping[str, Any]) 
 
 def load_finalisation_checkpoint(version_dir: Path, records: Sequence[Mapping[str, Any]],
                                  config: Mapping[str, Any], mode: str,
-                                 logger: logging.Logger) -> Optional[Dict[str, Any]]:
+                                 logger: logging.Logger) -> dict[str, Any] | None:
     path = finalisation_checkpoint_path(version_dir)
     if (not bool(config.get("resume_finalisation", True))
             or bool(config.get("force_recompute_features", False))
@@ -139,6 +142,7 @@ def load_finalisation_checkpoint(version_dir: Path, records: Sequence[Mapping[st
     try:
         payload = joblib.load(path)
     except Exception as error:
+        _execution.report_exception(error, __name__)
         logger.warning("Ignoring unreadable finalisation checkpoint: %s", error)
         return None
     expected = {
@@ -164,10 +168,8 @@ def load_finalisation_checkpoint(version_dir: Path, records: Sequence[Mapping[st
 def clear_finalisation_checkpoint(version_dir: Path) -> None:
     path = finalisation_checkpoint_path(version_dir)
     if path.exists():
-        try:
+        with contextlib.suppress(OSError):
             path.unlink()
-        except OSError:
-            pass
 
 
 def clean_full_feature_cache(version_dir: Path, logger: logging.Logger) -> None:
@@ -191,12 +193,12 @@ def clean_full_feature_cache(version_dir: Path, logger: logging.Logger) -> None:
 # ===========================================================================
 
 
-def version_directory(output_root: Path, version: Optional[str]) -> Path:
+def version_directory(output_root: Path, version: str | None) -> Path:
     """Saved numerical state is separate from the user-facing plot folder."""
     return Path(output_root) / "saved_runs" / (_utils.safe_name(str(version)) if version else "default")
 
 
-def resolve_version_dir(output_root: Path, requested: Optional[str]) -> Tuple[str, Path]:
+def resolve_version_dir(output_root: Path, requested: str | None) -> tuple[str, Path]:
     version = str(requested) if requested else ""
     if not version:
         pointer = Path(output_root) / "current_model.json"
@@ -205,7 +207,7 @@ def resolve_version_dir(output_root: Path, requested: Optional[str]) -> Tuple[st
     directory = version_directory(output_root, version)
     legacy = Path(output_root) / "model_versions"
     if version:
-        legacy = legacy / ("model_%s" % version)
+        legacy = legacy / (f"model_{version}")
     if not directory.exists() and legacy.exists():
         directory = legacy
     return version, directory

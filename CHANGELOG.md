@@ -1,6 +1,26 @@
 # Changelog
 
-## Unreleased
+## Changes in 1.1.0
+
+- Opt-in process-parallel period searches (`--n-jobs`, default 1), with deterministic parent-owned journals, source caps and ordered result merging; serial fallback for small batches.
+- Fix journal reconstruction order so repaired tables retain deterministic input order.
+- Route stage progress through logging; reserve console setup for the CLI.
+- Remove unused process-global NumPy seeding; stochastic algorithms retain their own explicit seeds.
+- Log caught stage exception types/messages and add scoped `--strict` fail-fast execution.
+- Add numerical tests for recovery, odd/even and multiharmonic doubling, alias replacement/retention, shared alias scores, cross-filter anchoring and single-filter SNR boundaries.
+- Release candidate: anonymise demo/fixture IDs and use distinct artificial periods; retain double dips.
+- Unify alias diagnostics with adoption weights (0.50/0.50/0.35); remove unused penalty setting.
+- Gate supported single-filter provenance on fold/peak SNR; preserve low-support candidate periods with explicit warnings.
+- Support NumPy 2 and allow Python 3.13; extend CI; add Ruff diagnostics without a repository-wide style sweep.
+- Modernise SPDX licence metadata and require setuptools >=77 for its build support.
+- Move the historical 1.0.2 review to docs/history and synchronise package/citation versions.
+- The baseline snapshot 429b32d already declares GPL-3.0-only in LICENSE, package and citation metadata.
+  There is no 1.0.9 Git tag in the repository, so its original tagged licence cannot be asserted.
+  Previously MIT-distributed copies retain their granted permissions.
+- Native Windows CI is configured, but no workflow run was returned for baseline 429b32d;
+  Linux verification here is not evidence of a successful native Windows run.
+
+## Earlier untagged changes (already present in baseline 429b32d)
 
 - Change the current source licence from MIT to GNU GPL version 3 only (`GPL-3.0-only`); align the README and package/citation metadata. Permissions previously granted for MIT-distributed copies remain unaffected.
 

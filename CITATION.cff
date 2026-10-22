@@ -5,8 +5,9 @@ type: software
 authors:
   - family-names: Duffy
     given-names: Aidan
-version: 1.0.9
-date-released: 2026-10-07
+version: 1.1.0
+# Release candidate; set date-released and uncomment doi after archiving.
+# doi: ""
 license: GPL-3.0-only
 references:
   - type: thesis

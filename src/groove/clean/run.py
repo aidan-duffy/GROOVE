@@ -1,14 +1,16 @@
 from __future__ import annotations
+
 import json
+
 import numpy as np
 import pandas as pd
-from . import settings as S
+
+from .. import execution as _execution
+from .. import resume as R
 from . import cuts as _cuts
 from . import loading as _loading
 from . import plots as _plots
-from .. import resume as R
-
-
+from . import settings as S
 
 
 def write_run_summary(summary_df: pd.DataFrame) -> None:
@@ -83,15 +85,15 @@ def main() -> None:
             f"No input files found in {S.INPUT_DIR} matching {S.FILE_GLOB}"
         )
 
-    print("=" * 90)
-    print("ATLAS FORCED-PHOTOMETRY BATCH CLEAN")
-    print("=" * 90)
-    print(f"Input folder:   {S.INPUT_DIR}")
-    print(f"Cleaned folder: {S.CLEANED_DIR}")
-    print(f"Plot folder:    {S.PLOT_DIR}")
-    print(f"Files found:    {len(files):,}")
-    print(f"Dip rescue:     {S.RESCUE_ENABLE}")
-    print("=" * 90)
+    _execution.log_info(__name__, "=" * 90)
+    _execution.log_info(__name__, "ATLAS FORCED-PHOTOMETRY BATCH CLEAN")
+    _execution.log_info(__name__, "=" * 90)
+    _execution.log_info(__name__, f"Input folder:   {S.INPUT_DIR}")
+    _execution.log_info(__name__, f"Cleaned folder: {S.CLEANED_DIR}")
+    _execution.log_info(__name__, f"Plot folder:    {S.PLOT_DIR}")
+    _execution.log_info(__name__, f"Files found:    {len(files):,}")
+    _execution.log_info(__name__, f"Dip rescue:     {S.RESCUE_ENABLE}")
+    _execution.log_info(__name__, "=" * 90)
 
     scientific = {k: v for k, v in R.settings_dict(S).items()
                   if not any(token in k for token in ('PLOT', 'SAVE_', 'EXAMPLE', 'PROGRESS', 'FORCE', 'OVERWRITE'))}
@@ -115,7 +117,7 @@ def main() -> None:
             for token, count in json.loads(row['reason_token_counts_json']).items():
                 all_reason_counts[token] = all_reason_counts.get(token, 0) + int(count)
             if file_number % max(1, S.PROGRESS_EVERY) == 0 or file_number == len(files):
-                print(f'[{file_number:,}/{len(files):,}] reused cleaned source')
+                _execution.log_info(__name__, f'[{file_number:,}/{len(files):,}] reused cleaned source')
             continue
 
         try:
@@ -215,6 +217,7 @@ def main() -> None:
                                       'output_hash': R.digest(cleaned_file)})
 
         except Exception as error:
+            _execution.report_exception(error, __name__)
             object_name, ra, dec = _loading.parse_name_ra_dec_from_filename(stem)
             rows.append(
                 {
@@ -270,7 +273,7 @@ def main() -> None:
             file_number % max(1, S.PROGRESS_EVERY) == 0
             or file_number == len(files)
         ):
-            print(f"[{file_number:,}/{len(files):,}] processed")
+            _execution.log_info(__name__, f"[{file_number:,}/{len(files):,}] processed")
 
     summary_df = pd.DataFrame(rows)
     summary_path = S.CLEANED_DIR / "cleaning_summary.csv"
@@ -301,14 +304,14 @@ def main() -> None:
     ok = summary_df.loc[summary_df["status"].eq("ok")].copy()
     failed = summary_df.loc[summary_df["status"].eq("failed")].copy()
 
-    print("=" * 90)
-    print("DONE")
-    print(f"Cleaned files:      {S.CLEANED_DIR}")
-    print(f"Cleaning plots:     {S.PLOT_DIR}")
-    print(f"Summary CSV:        {summary_path}")
-    print(f"Reason counts CSV:  {reason_path}")
-    print(f"Files successful:   {len(ok):,}")
-    print(f"Files failed:       {len(failed):,}")
+    _execution.log_info(__name__, "=" * 90)
+    _execution.log_info(__name__, "DONE")
+    _execution.log_info(__name__, f"Cleaned files:      {S.CLEANED_DIR}")
+    _execution.log_info(__name__, f"Cleaning plots:     {S.PLOT_DIR}")
+    _execution.log_info(__name__, f"Summary CSV:        {summary_path}")
+    _execution.log_info(__name__, f"Reason counts CSV:  {reason_path}")
+    _execution.log_info(__name__, f"Files successful:   {len(ok):,}")
+    _execution.log_info(__name__, f"Files failed:       {len(failed):,}")
 
     if len(ok):
         raw_total = int(pd.to_numeric(ok["n_raw"], errors="coerce").sum())
@@ -318,13 +321,13 @@ def main() -> None:
         fraction_removed = (
             (raw_total - kept_total) / raw_total if raw_total else np.nan
         )
-        print(f"Total raw points:   {raw_total:,}")
-        print(f"Total kept points:  {kept_total:,}")
-        print(f"Fraction removed:   {fraction_removed:.5f}")
+        _execution.log_info(__name__, f"Total raw points:   {raw_total:,}")
+        _execution.log_info(__name__, f"Total kept points:  {kept_total:,}")
+        _execution.log_info(__name__, f"Fraction removed:   {fraction_removed:.5f}")
 
     if len(failed):
-        print("Check the 'error' column in the summary CSV for failed files.")
-    print("=" * 90)
+        _execution.log_info(__name__, "Check the 'error' column in the summary CSV for failed files.")
+    _execution.log_info(__name__, "=" * 90)
 
     if len(failed):
         raise RuntimeError(f'{len(failed)} cleaning source(s) failed; fix inputs and resume to retry.')
