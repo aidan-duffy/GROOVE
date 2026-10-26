@@ -681,8 +681,7 @@ def umap_families_mode(config: dict[str, Any], args: argparse.Namespace) -> dict
                     os.link(str(source), str(destination))
                     status = "hardlinked"
                 except OSError:
-                    # Never fall back to copying thousands of images: that was
-                    # the cause of the earlier disk-space failure.
+                    # Avoid allocating duplicate pixel data when a hard link fails.
                     status = "hardlink_failed_no_copy_made"
             membership.at[row_index, "detached_family_plot_status"] = status
             if status in {"hardlinked", "existing_hardlink"}:

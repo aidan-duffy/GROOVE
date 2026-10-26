@@ -414,10 +414,10 @@ def find_2p_peak_support(
     series: str,
     period: float,
 ) -> dict[str, Any]:
-    """Look for a real LS top-N peak near 2*period after alias correction.
+    """Look for a real LS top-N peak near twice the alias-aware period.
 
-    This fixes the case where the raw peak is an alias near 1 d, a non-alias
-    peak is promoted later, and the old 2P candidate still points to ~2 d.
+    Harmonic support must refer to the promoted stellar peak rather than
+    the raw cadence-alias peak.
     """
     out = {
         "top_peak_2p_period_days": np.nan,
@@ -462,12 +462,10 @@ def update_post_alias_harmonics(
     peak_rows_all: list[dict[str, Any]],
     plot_payloads: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any] | None, float]],
 ) -> None:
-    """Recompute P-vs-2P tests after alias correction has chosen the series period.
+    """Recompute P-versus-2P diagnostics around the alias-aware series period.
 
-    Earlier versions ran the 2P test only on the raw LS period. That fails when
-    the raw period is an alias and the useful non-alias period is promoted later.
-    This updates tested_2p_days, odd/even metrics and multi-harmonic metrics for
-    the alias-aware recommended_series_period_days.
+    Update tested_2p_days, odd/even and multiharmonic metrics after alias
+    correction so they describe recommended_series_period_days.
     """
     row_lookup = {
         (str(r.get("file")), str(r.get("source_id")), str(r.get("series"))): r

@@ -225,11 +225,11 @@ def clean_for_csv(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def safe_write_csv(rows_or_df: Any, path: Path, index: bool = False) -> None:
-    """Write a CSV atomically and with a garbage-collection retry.
+    """Write a CSV atomically, with a garbage-collection retry on failure.
 
-    The earlier version sometimes crashed during checkpoint writing after many
-    files because large plot payloads were still held in memory. This helper is
-    deliberately defensive so partial CSV files are not left behind.
+    Temporary files prevent an interrupted write from replacing the last
+    complete table. Releasing unused objects can relieve memory pressure
+    before the existing retry.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -1,6 +1,7 @@
 include CITATION.cff environment.yml LICENSE CHANGELOG.md
-recursive-include configs *.yaml
+include configs/example.yaml configs/single_target.yaml
 recursive-include docs *.md
-recursive-include data *.md *.csv
+include data/example/README.md data/targets/README.md
+include data/targets/example_targets.csv data/manual_labels_template.csv
 recursive-include tests *.py
-recursive-include tools *.py *.sh
+recursive-include tools *.py

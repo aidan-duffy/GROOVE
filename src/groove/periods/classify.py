@@ -22,12 +22,10 @@ def series_has_peak_dominance(row: pd.Series | dict[str, Any]) -> bool:
 
 
 def series_is_significant(row: pd.Series | dict[str, Any] | None) -> bool:
-    """Robust significance decision for one series.
+    """Combine false-alarm probability, peak dominance and fold coherence.
 
-    FAP alone is not allowed to make every ATLAS light curve significant.  A
-    source passes when significance is accompanied by peak dominance or fold
-    coherence.  This keeps the 456 known-variable sample mostly significant,
-    while allowing a later general/non-periodic sample to produce likely_nonvar.
+    FAP alone is insufficient. A low FAP needs additional peak or fold evidence;
+    supported dominance or joint peak/fold SNR can also establish a detection.
     """
     if row is None:
         return False
@@ -123,7 +121,7 @@ def recommendation_label_from_status(
 ) -> str:
     """Map detailed confidence classes to the four simple review labels.
 
-    The label is now driven by detection strength first.  Alias/harmonic issues
+    The label is driven by detection strength first.  Alias/harmonic issues
     are warnings unless they actively changed the recommended period or are
     genuinely supported by the data.  This prevents every strong real variable
     from being swallowed by alias_possible/harmonic_possible.

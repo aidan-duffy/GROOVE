@@ -397,8 +397,8 @@ def main() -> None:
     _files.save_all_tables(summary_rows, peak_rows_all, current_inventory, memory_inventory, recommendations)
 
     # Save plots after alias-aware periods, post-alias harmonic flags and source
-    # labels are known. Each plot is saved to best_per_star plus duplicate tag
-    # folders such as strong/, alias/ and harmonic/ when relevant.
+    # labels are known. Each plot is saved to best_per_star and exactly one
+    # mutually exclusive primary review folder.
     source_info_lookup: dict[str, dict[str, Any]] = {}
     if recommendations is not None and not recommendations.empty:
         source_info_lookup = {

@@ -34,7 +34,7 @@ def report_exception(error: Exception, module: str) -> None:
 
 def log_info(module: str, *values: Any, sep: str = " ", end: str = "\n", file: Any = None,
              flush: bool = False) -> None:
-    """Route former console messages through the package logging hierarchy."""
+    """Route progress messages through the package logging hierarchy."""
     message = sep.join(str(value) for value in values)
     logger = logging.getLogger(module)
     (logger.error if file is sys.stderr else logger.info)(message)

@@ -71,8 +71,8 @@ LS_FAP_METHOD = "baluev"
 N_TOP_PEAKS = 12
 PEAK_MIN_SEPARATION_FRACTION = 0.02
 
-# Optional BLS diagnostic. Disabled by default for ATLAS because BLS is very
-# prone to 0.5/0.66/1/2-day cadence aliases in sparse ground-based data.
+# BLS diagnostics are enabled by default. Sparse ground-based sampling can
+# produce 0.5/0.66/1/2-day aliases; BLS does not set recommendations by default.
 RUN_BLS = True
 ALLOW_BLS_TO_SET_RECOMMENDED_PERIOD = False
 BLS_MIN_PERIOD_DAYS = 0.5
@@ -166,9 +166,9 @@ PLOT_MODE = "all"  # all | none
 # are still calculated normally. Set to None to restore automatic folding.
 FORCED_FOLD_PERIOD_DAYS: float | None = None
 
-# For large runs, do NOT keep full light-curve arrays and periodogram grids in
-# memory until the end. This was the cause of crashes on large batches. The code
-# now streams raw results to disk, then re-runs only the plotting step at the end.
+# Keep large light-curve arrays and periodogram grids out of parent memory.
+# Save compact numerical results first, then stream the plotting pass one
+# source at a time. Plot generation can recompute diagnostic LS/BLS arrays.
 KEEP_PLOT_PAYLOADS_IN_MEMORY = False
 MAKE_PLOTS_AFTER_FINAL = True
 # Resume an interrupted second plotting pass by reusing normal plots only when
@@ -250,10 +250,9 @@ TAG_COLORS = {
     "nonvar": "#e74c3c",
 }
 
-# A source/series is treated as a significant periodic detection if the LS FAP
-# is good OR the peak/fold SNR is good. The OR is intentional: long-baseline
-# survey light curves can have conservative/unstable FAP behaviour, while real
-# dip-like or colour-dependent signals may be clearer in the folded curve.
+# Significance combines FAP, peak dominance and peak/fold SNR. Low FAP needs
+# additional support; supported dominance or joint peak/fold SNR can also pass.
+# See classify.series_is_significant for the exact logical combinations.
 FAP_THRESHOLD = 0.01
 PERIODOGRAM_SNR_THRESHOLD = 3.0
 FOLD_SNR_THRESHOLD = 3.0
@@ -278,8 +277,8 @@ MULTIHARMONIC_NTERMS = 3
 MULTIHARMONIC_2P_MIN_GAIN = 1.08
 MULTIHARMONIC_2P_MIN_POWER = 0.05
 
-# A single filter can be trusted when the signal is strong and not dominated by
-# a known/field alias. This is important for objects visible in o but not in c.
+# Supported single-filter provenance requires both raw-series SNR thresholds.
+# Low-support candidates are retained and alias warnings remain independent.
 ALLOW_SINGLE_FILTER_RECOMMENDATION = True
 SINGLE_FILTER_MIN_FOLD_SNR = 3.0
 SINGLE_FILTER_MIN_PEAK_SNR = 4.0

@@ -54,10 +54,10 @@ def mark_sources_with_existing_plots(sources: Mapping[str, Dict[str, Any]],
 
 
 def link_or_copy(source: Path, destination: Path, allow_copy: bool = False) -> bool:
-    """Create a zero-duplication hard link, optionally copying across volumes.
+    """Create a hard link without duplicating pixel data; optionally allow a copy.
 
-    A full disk must never trigger a second attempt to copy the image: that was
-    the cause of the previous failed large run.
+    Copy fallback is opt-in because it allocates additional storage and may
+    also fail when the filesystem is full.
     """
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.exists():

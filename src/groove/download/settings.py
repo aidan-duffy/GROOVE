@@ -35,7 +35,7 @@ COLUMN_CANDIDATES: Dict[str, Sequence[str]] = {
         "GaiaDR3", "Gaia_DR3", "Gaia DR3", "gaia_dr3", "gaia_source_id",
         "source_id", "SOURCE_ID", "DR3_source_id", "dr3_source_id",
     ),
-    # Optional grouping column: used for sub-folders and for --group.
+    # Optional grouping column: used in filenames/metadata and the group config filter.
     "group": (
         "group", "Group", "field", "Field", "sample", "Sample",
         "cluster_name", "Cluster", "cluster", "Name", "association",

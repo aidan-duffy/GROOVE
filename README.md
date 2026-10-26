@@ -61,7 +61,7 @@ groove --version
 ```
 
 Alternatively, `conda env create -f environment.yml`, followed by
-`conda activate groove`, installs the supplied Conda environment.
+`conda activate groove`, sets up an equivalent Conda environment.
 `python -m groove` can be used wherever these examples say `groove`.
 
 ## Try it without an ATLAS account
@@ -76,8 +76,8 @@ This creates 12 seeded synthetic stars with wavelike, dipping and constant
 signals, a truth table, and a complete configuration. It runs cleaning,
 selection, period searching, classification and UMAP. All observations are
 artificial. This is an installation and integration demonstration, not a
-survey completeness measurement. To repeat the fitted morphology stage, use
-`groove morphology -c groove_demo/run.yaml -- --overwrite`.
+survey completeness measurement. To deliberately recalculate the fitted morphology stage, use
+`groove morphology -c groove_demo/run.yaml --rerun`.
 
 ## Download ATLAS photometry
 
@@ -220,12 +220,16 @@ therefore be retained by cleaning but unavailable to morphology.
 | `3_periods/tables/source_period_recommendations.csv` | Adopted period and diagnostics per source |
 | `plots/clean/`, `plots/periods/` | Cleaning and period-search figures |
 | `4_morphology/saved_runs/<run>/` | Fitted models, tables and caches |
-| `4_morphology/classification/` | Tables and source plots for `mode: classify` |
+| `4_morphology/classification/tables/` | Tables for `mode: classify` |
+| `plots/ML/<run>/` | Morphology phase plots, maps, category folders and contact sheets |
 
-Morphology figures live in `plots/ML/<run>/`, including maps, phase folds, category folders and appendix figures. An unnamed run uses `default`; classification-only plots use `plots/ML/classification/`. Older saved models can still be loaded.
-Start with the period recommendation table and morphology `tables/all_sources.csv`.
-Open `maps/*interactive.html` in a browser. Keep the surrounding output tree
-with the HTML so linked images remain accessible.
+An unnamed fitted run uses `default`; classification-only plots use
+`plots/ML/classification/`. Start with the period recommendation table and
+`4_morphology/saved_runs/<run>/tables/all_sources.csv` (or the classification
+table directory). Open `plots/ML/<run>/maps/*interactive.html` in a browser.
+Keep the surrounding ML tree with the HTML so linked images remain accessible.
+See [the detailed morphology layout](docs/morphology_details.md#outputs-and-review)
+for custom output roots and older saved models.
 
 ## Pipeline overview
 
@@ -234,7 +238,7 @@ with the HTML so linked images remain accessible.
 | `download` | Retrieve forced photometry with your ATLAS token; resume saved jobs | One raw CSV per source |
 | `clean` | Remove measurements failing photometric and image-quality checks | Cleaned CSVs, retention and rejection tables |
 | `select` | Select sources with enough observations, baseline and usable precision | Selected light curves and rejection reasons |
-| `periods` | Search with Lomb–Scargle; diagnose aliases and harmonics; optionally check BLS | One recommendation per source, diagnostic tables and plots |
+| `periods` | Search with Lomb–Scargle; diagnose aliases and harmonics; check BLS by default | One recommendation per source, diagnostic tables and plots |
 | `morphology` | Measure light-curve shapes, suggest families, apply manual labels and optionally fit UMAP | Source catalogue, review plots and interactive maps |
 
 The scientific routines originate from Aidan Duffy's MSc thesis, *The Search
@@ -285,8 +289,9 @@ use `morphology: {mode: classify}`. It measures the same features, assigns the
 same rules and writes tables and phase plots without fitting a map. You can
 also stop after period searching with `groove run -c run.yaml --skip-morphology`.
 
-`configs/single_target.yaml` illustrates the classification route. Its target
-CSV and Gaia ID must be replaced with your real values.
+[`configs/single_target.yaml`](configs/single_target.yaml) illustrates the
+classification route. Its target CSV and Gaia ID must be replaced with your real
+values.
 
 ## Add targets to an existing map
 
@@ -304,6 +309,10 @@ morphology:
   n_jobs: 1
 ```
 
+In this example both YAML files are at the repository root. If they are saved
+in `configs/`, prefix the shown relative paths with `../`. For a complete offline
+example, see [two samples on one map](docs/map_controls.md#complete-two-sample-example).
+
 Fit the reference with `model_version: reference_v1` first. Frozen preprocessing
 and UMAP are reused; changing representation settings requires a new fit.
 Existing source IDs are skipped by default. `current_model.json` identifies the
@@ -319,18 +328,21 @@ morphology:
   outline_new_sources: true
 ```
 
-Dataset names match each configuration's top-level `name`. Omit dataset_markers
-for identical circles. Colours remain morphology labels; shapes identify samples.
-To update maps after a batch has already been added:
+Dataset names match each configuration's top-level `name`. Merge these keys into
+the existing `morphology` section. Omit `dataset_markers` for identical circles. Colours remain morphology labels; shapes identify samples.
+After saving the new-batch example as `configs/new_batch.yaml`, update its
+`output_root` to the reference directory relative to that YAML. To redraw maps:
 
 ```bash
 groove morphology -c configs/new_batch.yaml -- --mode map-only
 ```
 
-This redraws saved maps without recomputing scientific results. In the interactive
-map, click several stars (or use lasso/box selection) to compare phase images in fixed-width cards that wrap into rows below it. Drag or scroll to zoom
-the map; double-click to reset. Remove individual previews or clear the selection. See
-[map controls](docs/map_controls.md) for shapes, legends and single-star highlighting.
+This redraws saved maps without recomputing scientific results. In the
+interactive map, click several stars (or use lasso/box selection) to compare
+their phase images in cards below the map. Drag or scroll to zoom; double-click
+to reset. Remove individual previews or clear the selection. See
+[map controls](docs/map_controls.md) for shapes, legends and single-star
+highlighting.
 
 ## Settings and scientific interpretation
 
@@ -378,16 +390,16 @@ similarity and are not physical axes or a classifier. Read
 ## Other ATLAS data access
 
 The [ATLAS data directory](http://dtn-itc.ifa.hawaii.edu/atlas/atclass/)
-is included as an additional resource. The directory inspected on 7 October
-2026 lists reduced/difference images, detection-classification products and
+is included as an additional resource. As of October 2026 the directory lists
+reduced/difference images, detection-classification products and
 `dclass`/`nnc` manuals. It is not a drop-in per-star light-curve download endpoint.
 
 GROOVE analyses photometry tables, not image pixels or individual detection
 classification vectors. FITS images need photometric extraction first; renaming
 or converting an image file to CSV does not create a light curve. If you obtain
 per-source time-series photometry from an archive or a separate extraction
-workflow, prepare it as the CSV format below, then use `input_folder` and
-`--skip-download`. Check the data's baseline and provenance; archive products
+workflow, prepare it using [the input conventions](#use-existing-photometry),
+then use `input_folder` and `--skip-download`. Check the data's baseline and provenance; archive products
 are not automatically equivalent to a fresh forced-photometry request.
 
 ## Extended demonstration and Linux validation
@@ -402,12 +414,13 @@ python -m groove demo-check demo_extended
 
 This contains 24 artificial sources. Read `demo_extended/CASE_GUIDE.md` and
 inspect `demo_source_review.csv`; injected behaviours are not forced labels.
-Automatic alias folds and BLS are enabled for this demonstration. The default
-12-source demo and its seeded raw observations remain unchanged.
+Automatic alias folds and BLS are enabled for this demonstration. The standard
+12-source demo uses the same seeded light-curve generation, with artificial IDs.
 
 Follow [the Linux/WSL validation guide](docs/linux_validation.md) to test each
 stage, saved-model operations and one authenticated real download. The tools
-folder includes download-integrity and original-function comparison helpers.
+folder includes download-integrity and synthetic-output audit helpers. Comparison
+with original research scripts is optional and requires those scripts separately.
 
 The extended source `9900000000000000023` has a dominant daily systematic and
 an injected 8.3-day stellar wave. Its rank-two stellar peak clears the existing
@@ -428,5 +441,7 @@ configuration, cleaning and morphology regressions. The downloadable demo runs
 the full map workflow. The original thesis scripts and credentials are not
 required for installation and are not included in this distribution.
 
-`CITATION.cff` supplies citation metadata. Include the acknowledgements required
-by the ATLAS service when publishing analyses. Licence: GNU GPL version 3 only (`GPL-3.0-only`); see [LICENSE](LICENSE).
+`CITATION.cff` contains citation metadata. Include the acknowledgements required
+by the ATLAS service when publishing analyses.
+
+Licence: GNU GPL version 3 only (`GPL-3.0-only`); see [LICENSE](LICENSE).

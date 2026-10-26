@@ -159,7 +159,7 @@ def apply_overrides(settings_module, overrides: dict[str, Any], stage: str) -> N
         setattr(settings_module, name, value)
 
 
-EXAMPLE = """# groove pipeline config - copy this file and edit it for your run.
+EXAMPLE = """# GROOVE pipeline configuration: copy and edit for your sample.
 # Paths are relative to this file unless absolute.
 
 name: my_run                        # dataset name
@@ -177,7 +177,7 @@ photometry: reduced                 # reduced (recommended) or difference
 # input_folder: my_existing_lightcurves  # optional raw CSV folder; use --skip-download
 
 # ---- advanced: override any setting of a stage ------------------------------
-# Keys are the UPPER_CASE names in src/groove/<stage>/settings.py
+# Use lowercase forms of the UPPER_CASE settings names under each stage.
 download:
   dry_run: false                    # true = list targets and time estimate, submit nothing
   limit_targets: null               # e.g. 5 for a test run

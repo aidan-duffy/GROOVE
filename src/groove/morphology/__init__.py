@@ -5,5 +5,5 @@ independent axis, so an unusual transit remains a transit while its interest
 status records why it deserves follow-up. The authoritative period always comes
 from the period-search tables; the diagnostics here never replace it.
 
-Modes: fit | transform | refit | relabel | plot-only | map-only | highlight-source |
+Modes: classify | fit | transform | refit | relabel | plot-only | map-only | highlight-source |
        umap-families"""

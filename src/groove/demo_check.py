@@ -78,7 +78,7 @@ def check(directory: str | Path) -> dict:
     if not set(series.series.dropna()).issubset(set(cfg.periods.get('series_to_run', ['o', 'c']))):
         errors.append('unexpected period-search series')
     summary = pd.read_csv(cfg.clean_dir / 'cleaning_summary.csv')
-    # Detailed original cut boundaries are covered by the supplied audit_outputs.py.
+    # Detailed cleaning cut boundaries are exercised by tools/audit_outputs.py.
     report = {'passed': not errors, 'errors': errors, 'sources': len(truth),
         'cleaned_summary_rows': len(summary), 'pngs_checked': len(pngs),
         'interactive_maps': len(htmls), 'diagnostic_coverage': coverage,

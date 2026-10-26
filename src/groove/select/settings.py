@@ -1,4 +1,4 @@
-"""Defaults for the selection stage. All values from thesis Section 2.3."""
+"""Source-selection defaults; validate usability thresholds for each sample."""
 from __future__ import annotations
 
 from pathlib import Path

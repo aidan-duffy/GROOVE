@@ -145,7 +145,7 @@ DEFAULTS: Dict[str, Any] = {
     "manual_labels_file": None,
     "category_colours": CATEGORY_COLOURS,
     "thresholds": {
-        # --- periodicity, in the recalibrated units of Section 2
+        # --- periodicity, using binned-profile significance
         "periodic_chi2": 5.0,
         "periodic_chi2_strong": 25.0,
         "periodic_snr": 6.0,

@@ -93,7 +93,9 @@ and cyan separately. Combined photometry is opt-in through `series_to_run`;
 its centring remains per band. `plot_series` independently selects saved series
 plots (see [output options](configuration.md#plot-and-filter-selection)). The
 upper period is restricted by the observed baseline and minimum cycle count.
-BLS is an optional diagnostic and does not set the recommendation by default.
+BLS diagnostics are enabled by default (`run_bls: true`), but BLS does not set
+the recommendation (`allow_bls_to_set_recommended_period: false`). Disable
+`run_bls` to omit that diagnostic search.
 
 The code evaluates universal and field-local cadence aliases, spectral-window
 support, relative peak strength, fold coherence, inter-band agreement, odd/even
@@ -111,6 +113,16 @@ or period-stage code invalidate cached scientific results. Tables should always
 be inspected for failed/skipped series; a run with no successful analysis raises
 an error. Partially failed runs do not receive a completion marker.
 
+### Period-review strength
+
+A strong review detection requires the significance check and either
+P1/P2 >= 1.5 or P1/P4 >= 1.8. The latter allows a coherent non-sinusoidal signal
+with a competitive second peak to pass. Alias and harmonic evidence still
+route it to their review folders. These ratios compare peak powers, not period
+values. A strong detection label does not prove that a unique physical period
+or a planetary transit has been identified. This review-rule change does not
+change the computed periodogram, candidate periods or adopted period.
+
 ## Morphology
 
 `features.py` measures shapes and time variation; `classify.py` assigns rules
@@ -125,6 +137,7 @@ review products. `modes.py` coordinates these operations.
 | `transform` | Add sources to an existing reference without refitting |
 | `relabel` | Apply changed manual labels to saved results |
 | `plot-only` | Regenerate saved phase-fold products |
+| `map-only` | Redraw saved overview maps without refitting or changing scientific tables |
 | `highlight-source` | Inspect a saved source and its neighbours |
 | `umap-families` | Additional density-region review of a saved map |
 
@@ -134,13 +147,3 @@ The source-level period recommendation is authoritative. Both filters are
 accepted by default. Manual labels use `manual_primary_tag` and
 `manual_secondary_tags`, as shown in `data/manual_labels_template.csv`.
 See [morphology notes](morphology_details.md) for interpretation and persistence.
-
-### Period-review strength
-
-A strong review detection requires the significance check and either
-P1/P2 >= 1.5 or P1/P4 >= 1.8. The latter allows a coherent non-sinusoidal signal
-with a competitive second peak to pass. Alias and harmonic evidence still
-route it to their review folders. These ratios compare peak powers, not period
-values. A strong detection label does not prove that a unique physical period
-or a planetary transit has been identified. This review-rule change does not
-change the computed periodogram, candidate periods or adopted period.

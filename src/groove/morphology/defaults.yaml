@@ -137,8 +137,8 @@ thresholds:
   noisy_min_scatter_ratio: 3.0
   low_confidence: 0.60
 
-# Manual labels always win and are never overwritten. The pipeline creates or
-# synchronises the output-root copy from the repository template as needed.
+# Manual labels take precedence and entered values are preserved. The pipeline
+# creates or extends the output-root CSV schema when needed.
 manual_labels_file: null   # defaults to <output_root>/manual_labels.csv
 
 # Incremental behaviour. null selects the mode-aware default: no outline for
@@ -149,9 +149,9 @@ outline_new_sources: null
 batch_id: null
 force_recompute_features: false
 
-# Outputs, caching and recoverability. The existing LS-periodogram PNG is the
-# canonical per-source image. This pipeline creates only one fallback fold when
-# that image is unavailable, then hard-links it into the primary family folder.
+# Outputs, caching and recoverability. Morphology creates one accepted-band
+# phase-fold image per source at its saved recommended period and hard-links
+# that image into its primary family folder. LS/BLS figures remain separate.
 # Secondary/review memberships are CSV manifests rather than extra image trees.
 make_maps: true
 # Three overview maps; transient is optional. Internal saved models remain available.

@@ -25,8 +25,8 @@ PLOT_DIR: Path | None = None    # set by the pipeline config
 # ============================================================================
 
 FILE_GLOB = "*.csv"             # Recommended: all split per-star CSV files.
-OVERWRITE_CLEANED_FILES = True  # Legacy option; validated checkpoints now control reuse. Use --rerun to rebuild.
-PROGRESS_EVERY = 100             # Print progress every N files.
+OVERWRITE_CLEANED_FILES = True  # Legacy option; validated checkpoints control reuse. Use --rerun to rebuild.
+PROGRESS_EVERY = 100             # Log progress every N files.
 
 
 # ============================================================================
@@ -63,8 +63,8 @@ REQUIRE_FINITE_MAG = False       # Recommended: False; keeps negative-flux epoch
 # at a fixed position, so a source consistent with zero scatters symmetrically
 # about zero. Cutting on sign truncates the noise distribution and biases the
 # mean flux high, which flattens real minima. Cut on SIGNIFICANCE instead: a
-# strongly negative point indicates a subtraction failure, a ghost, a trail,
-# or a variable present in the reference image, and is a genuine defect.
+# strongly negative point can indicate subtraction artefacts or variability
+# relative to the reference image. Interpret this cut for the input data product.
 # ============================================================================
 
 MIN_SNR = -5.0                   # Reject uJy/duJy below this; recommended -5.
@@ -104,7 +104,7 @@ Y_MAX = 10460.0                  # Keep away from detector y edge; recommended 1
 # because rescue can restore a point that failed a soft image-quality cut.
 # ============================================================================
 
-RESCUE_ENABLE = False            # Package default; original supplied script enabled rescue.
+RESCUE_ENABLE = False            # Opt-in rescue of measurements failing only soft cuts.
 BASELINE_WINDOW_PTS = 41         # Running-median window; recommended odd value near 41.
 RESCUE_Z = 5.0                   # Candidate dip significance; recommended 5 sigma.
 
@@ -122,5 +122,5 @@ EXAMPLE_SELECTION = "highest_removed_fraction"
 
 TOP_N_REASONS = 15               # Recommended: 10–20 reasons on the bar chart.
 SAVE_PNG = True                  # PNG for quick viewing.
-SAVE_PDF = True                  # PDF for thesis-quality vector output.
+SAVE_PDF = True                  # PDF for vector output.
 PLOT_DPI = 250                   # Recommended: 200–300 dpi for PNG files.

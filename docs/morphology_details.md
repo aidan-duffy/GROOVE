@@ -61,8 +61,8 @@ filter disagreements, evolution and confidence remain visible in the tables.
 
 Manual labels take precedence. Edit the automatically created
 `manual_labels.csv` under the morphology output root. Use source IDs as text,
-with `dataset` matching the run's `name`, and use the columns in the supplied
-manual-label template. For a fitted model, rerun in `relabel` mode. For
+with `dataset` matching the run's `name`, and use the columns in
+`data/manual_labels_template.csv`. For a fitted model, rerun in `relabel` mode. For
 classification-only results, rerun `classify`.
 
 ## Fit, transform and small samples
@@ -89,21 +89,41 @@ could be mistaken for a fitted model.
 
 ## Outputs and review
 
-| Product | Location within a fitted model version |
-|---|---|
-| Full feature/label catalogue | `tables/all_sources.csv` |
-| Review targets | `tables/review_queue.csv` |
-| Interactive maps | `maps/*interactive.html` |
-| Compact source phase plots | `source_plots/phase_folded/` |
-| Primary morphology folders | `category_folds/primary/` |
-| Fitted representations and configuration | `models/` |
-| Feature checkpoints | `cache/` |
+Tables, models and caches are separate from figures. For the default pipeline
+layout, paths below are relative to `output_folder`. `<run>` is the configured
+`model_version` (or `default` when an unnamed reference is fitted).
 
-Classification-only outputs use the same table/plot names beneath
-`classification/`, without fitted model files. Keep the complete output tree
-when moving interactive maps. Source plots use the accepted filters and the
-saved adopted period. The detailed periodograms remain in the period-stage
-output folder.
+| Product | Location |
+|---|---|
+| Full feature/label catalogue | `4_morphology/saved_runs/<run>/tables/all_sources.csv` |
+| Review targets | `4_morphology/saved_runs/<run>/tables/review_queue.csv` |
+| Fitted representations and metadata | `4_morphology/saved_runs/<run>/models/` |
+| Feature/finalisation checkpoints | `4_morphology/saved_runs/<run>/cache/` |
+| Resolved fitted configuration | `4_morphology/saved_runs/<run>/models/resolved_config.json` |
+| Interactive maps | `plots/ML/<run>/maps/*interactive.html` |
+| Compact source phase images | `plots/ML/<run>/source_plots/phase_folded/` |
+| Primary morphology folders | `plots/ML/<run>/category_folds/primary/` |
+| Contact sheets and interest folders | `plots/ML/<run>/{appendix,interest}/` |
+| Manual labels | `4_morphology/manual_labels.csv` |
+
+Classification-only tables and caches use `4_morphology/classification/`;
+its resolved configuration is `resolved_config.json`, and its figures use
+`plots/ML/classification/`. It has no fitted UMAP models or interactive maps.
+Compact `.light.joblib` source caches and a finalisation checkpoint are retained
+for compatible fitted runs; full observation caches are removed after success
+when configured to do so. Do not delete resumable state if it is still needed.
+
+A custom morphology `output_root` contains `saved_runs/<run>/` (or
+`classification/`). If its last component is `4_morphology`, figures go beside it
+under `../plots/ML/<run>/`; otherwise they go under that custom root's
+`plots/ML/<run>/`. Older `model_versions/` layouts remain readable, but newly
+rendered figures follow the current plot layout.
+
+Keep the complete ML figure tree when moving interactive maps. Source plots use
+the configured accepted filters and saved adopted period; O/C are overlaid and
+median-centred when both are present. Detailed periodograms stay in the
+period-stage folder. In the map list, `combined` means combined feature blocks,
+not a combined-photometry period search.
 
 Seeded runs are reproducible within a fixed dependency environment. Seeds
 alone do not guarantee identical coordinates across library versions. Record

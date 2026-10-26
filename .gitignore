@@ -48,6 +48,6 @@ Thumbs.db
 # Contained local validation runs
 /testing/
 
-# Local review patch may contain deleted historical values; do not publish it.
+# Keep local source-update patches outside version control.
 /changes.patch
 /.ruff_cache/

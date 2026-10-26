@@ -54,8 +54,10 @@ Errors do not become a successful completion receipt. Clean and period stages
 save successful work and report failed sources; morphology feature extraction
 saves successful feature caches and reports processing_failures.csv. Fix the
 reported cause, then resume. Restart does not diagnose or solve a genuinely
-stalled calculation, and this release adds neither per-source timeouts nor
-parallel period-search workers.
+stalled calculation. Per-source timeouts are not implemented. GROOVE
+supports opt-in process-parallel period calculations with `--n-jobs`; this
+reduces throughput time for suitable workloads but does not resume a single
+LS/BLS search partway through its frequency grid.
 
 ## Deliberately recalculate: --rerun
 
@@ -107,7 +109,7 @@ Runs created before 1.0.9 lack the new receipts/journals and may need one rebuil
 to establish them. Saved progress that existed only in the old process's memory
 cannot be recovered. If an older completed morphology reference blocks the
 first resumed full run, use a fresh validation folder or a deliberate --rerun.
-Once 1.0.9 establishes its state, subsequent interruptions use the new resume
+Once compatible state is established, subsequent interruptions use the resume
 mechanism. Stop the old process before installing a source update.
 
 

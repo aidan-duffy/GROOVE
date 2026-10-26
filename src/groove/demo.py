@@ -100,7 +100,7 @@ def create(directory: str | Path, *, extended: bool = False) -> Path:
             "8.3-day stellar wave; the daily peak should trigger automatic alias review.\n"
             "alias_promoted strengthens the 8.3-day stellar term so LS rank 2 clears\n"
             "the replacement threshold and is adopted over the rank-1 daily alias.\n"
-            "nightly_sampling samples an 73.6-day wave near the same time each night;\n"
+            "nightly_sampling samples a 73.6-day wave near the same time each night;\n"
             "inspect its daily side peaks even if the true period remains strongest.\n"
             "unequal_eclipses tests P versus P/2 and 2P diagnostics. Repeated flares,\n"
             "irregular dips, evolving waves, noisy measurements and single-filter\n"

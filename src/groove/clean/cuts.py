@@ -56,7 +56,7 @@ def clean_atlas_df(df_raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         _loading.safe_numeric(df, col)
 
     # Finite required values. Flux is the primary measurement; m/dm are
-    # required only if REQUIRE_FINITE_MAG is enabled (see section 4).
+    # required only if REQUIRE_FINITE_MAG is enabled (see clean/settings.py).
     required_for_finite = ["MJD", "uJy", "duJy"]
     if S.REQUIRE_FINITE_MAG and "m" in df.columns and "dm" in df.columns:
         required_for_finite += ["m", "dm"]

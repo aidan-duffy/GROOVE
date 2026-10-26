@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "groove"
-version = "1.1.0"
-description = "Periodic-variability and deep-occultation search in ATLAS light curves of young stars"
+version = "1.1.1"
+description = "ATLAS light-curve variability exploration, period searches and morphology analysis"
 readme = "README.md"
 license = "GPL-3.0-only"
 license-files = ["LICENSE"]

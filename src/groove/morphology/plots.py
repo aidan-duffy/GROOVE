@@ -399,7 +399,7 @@ def make_static_map(table: pd.DataFrame, x_col: str, y_col: str, title: str,
         # Two draws with SCALAR edge colours. matplotlib's scatter ignores an
         # ARRAY of edgecolors when `c` is a single colour, so a per-point edge
         # array silently does nothing; and `color=` would override edgecolors
-        # entirely. Both were verified against rendered output.
+        # entirely. Separate draws preserve the intended outline styles.
         for mask, edgecolour, _width in ((~latest, "none", 0.0), (latest, "black", 0.9)):
             part = block.loc[mask.to_numpy()]
             if part.empty:
@@ -687,8 +687,8 @@ def generate_plots(records: Sequence[Mapping[str, Any]], table: pd.DataFrame,
                    plot_index: Mapping[str, Path] | None = None) -> dict[str, Path]:
     """Legacy cache-based phase renderer; never returns LS-periodogram paths.
 
-    Normal production runs use :func:`generate_phase_fold_products` with raw
-    O-band observations.  This compatibility path is retained for callers that
+    Normal production runs use :func:`generate_phase_fold_products` with observations
+    from the configured accepted bands.  This compatibility path is retained for callers that
     still have full feature caches.
     """
     cache_by_key = {str(r["summary"]["source_key"]): r.get("cache_path") for r in records}
@@ -850,8 +850,8 @@ def phase_fold_plot_only(config: dict[str, Any], args: argparse.Namespace) -> di
         "classification_evidence_umap_2") if column in table.columns]
     protected = table[protected_columns].copy(deep=True)
 
-    # Plotting explicitly reloads O-band observations only. No feature
-    # extraction, classifier, UMAP fit/transform, or period search is called.
+    # Reload the configured accepted bands for plotting. No feature extraction,
+    # classification, UMAP fit/transform, or period search is called.
     local = dict(config)
     local["_phase_fold_products_only"] = True
     local["_plot_only_lightweight_validation"] = True

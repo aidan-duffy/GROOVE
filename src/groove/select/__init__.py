@@ -1,1 +1,1 @@
-"""Source-level usability selection (thesis Section 2.3)."""
+"""Source-level usability selection for cleaned ATLAS light curves."""

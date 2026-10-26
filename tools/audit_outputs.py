@@ -1,6 +1,7 @@
-"""Audit a GROOVE synthetic demo; optionally compare supplied original scripts.
+"""Audit a GROOVE synthetic demo; optionally compare with the original thesis scripts.
 
-Usage: python audit_outputs.py demo --originals ../upload
+Usage: python tools/audit_outputs.py groove_demo
+Optional: --originals /path/to/original_science_scripts
 Requires GROOVE plus Pillow (installed with matplotlib).
 """
 from pathlib import Path

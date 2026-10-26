@@ -35,15 +35,18 @@ OUTPUT_DIR/tables/
     field_alias_memory.csv              persistent accumulated alias memory
     extra_phase_fold_diagnostics.csv    optional alias/harmonic plot manifest
 
-OUTPUT_DIR/plots/<series>/<tag>/
+PLOT_ROOT/<series>/<tag>/
     one diagnostic plot per successful source/series, organised into:
-    best_per_star and exactly one of strong, alias, harmonic or nonvar.
+    best_per_star and one of strong, alias, harmonic, weak_or_ambiguous or nonvar.
 
-OUTPUT_DIR/plots/<series>/<alias-or-harmonic>/extra_phase_folds/
+PLOT_ROOT/<series>/<alias-or-harmonic>/extra_phase_folds/
     optional alias-candidate and harmonic-test phase-fold comparison figures.
 
-OUTPUT_DIR/plots/000_master_review_all_stars.png
+PLOT_ROOT/000_master_review_all_stars.png
     a single overview plot of all source-level recommendations.
+
+PLOT_ROOT is plots/periods under the pipeline output folder, or OUTPUT_DIR/plots
+when PLOT_DIR is unset in a standalone settings-based call.
 
 Important interpretation
 ------------------------

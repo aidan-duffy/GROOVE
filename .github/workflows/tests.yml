@@ -13,8 +13,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: python -m pip install -e ".[dev]"
-      # Existing lint debt is reported without blocking scientific tests/builds.
-      # Touched files are lint-clean; see CHANGES_APPLIED.md for the remaining count.
+      # Lint findings are reported without blocking the tests or build.
       - run: python -m ruff check src tests
         continue-on-error: true
       - run: python -m pytest -q

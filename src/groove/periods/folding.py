@@ -88,12 +88,9 @@ def fold_coherence_metrics(
 def peak_strength_metrics(peaks: list[tuple[float, float, int]]) -> dict[str, Any]:
     """Return dominance metrics for the top periodogram peaks.
 
-    The main strong-period rule is deliberately simple and close to the user's
-    requested behaviour: if the best independent peak is much taller than the
-    second or fourth peak, the periodogram contains a clean periodic signal.
-    If the top four peaks are all very similar, the light curve may be variable
-    but the period is not uniquely identified; later general samples can be
-    marked likely_nonvar/weak from this.
+    A leading independent peak that exceeds the second or fourth peak provides
+    dominance evidence. Similar top peaks indicate competing periods; these
+    ratios are combined with significance and fold coherence in later review.
     """
     powers = [float(pw) for _, pw, _ in peaks if np.isfinite(pw)]
     out = {

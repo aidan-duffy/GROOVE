@@ -4,6 +4,9 @@ Generate a commented starting file with `groove init configs/my_sample.yaml`.
 Analysis commands use -c/--config to choose this YAML. File paths are relative
 to the YAML file, not the terminal's current directory. Keep stage overrides in
 one section each; duplicate YAML sections can silently replace earlier settings.
+The generated file and [bundled example](../configs/example.yaml) have matching
+options. Their target/output paths differ because the bundled file lives in
+`configs/`, one directory below the repository root.
 
 ## Common options
 
@@ -39,7 +42,7 @@ one section each; duplicate YAML sections can silently replace earlier settings.
 | morphology.existing_id_policy | skip by default when transforming |
 | morphology.maps_to_plot | [classification_evidence, combined, periodic]; transient optional |
 | morphology.dataset_markers | {}; map dataset names to supported shapes, otherwise circles |
-| morphology.outline_new_sources | true to outline latest batch; map-only can apply it retrospectively |
+| morphology.outline_new_sources | null; fit/refit have no outline, transform outlines the latest batch; set true for map-only highlighting |
 
 ## Detailed settings
 
@@ -50,12 +53,13 @@ are available in these authoritative files:
 - [Cleaning](../src/groove/clean/settings.py)
 - [Source selection](../src/groove/select/settings.py)
 - [Period search](../src/groove/periods/settings.py)
-- [Morphology commented YAML](../src/groove/morphology/defaults.yaml)
+- [Morphology commented YAML](../src/groove/morphology/defaults.yaml) and
+  [additional internal defaults](../src/groove/morphology/settings.py)
 
 For settings-based stages, supported uppercase settings become lowercase YAML
 keys under their stage, e.g. N_EXAMPLE_PLOTS becomes clean.n_example_plots.
 Morphology options use their existing lowercase YAML names. Derived paths are
-normally supplied by the pipeline; prefer top-level input_folder/output_folder.
+normally set by the pipeline; prefer top-level `input_folder`/`output_folder`.
 Scientific cut and rule thresholds require sample-specific validation.
 
 [Stage details](stages.md), [morphology details](morphology_details.md),
@@ -142,8 +146,42 @@ settings linked above for supported plotting options.
   `single_filter_below_snr_thresholds`; disabling single-filter support retains
   the candidate with `single_filter_recommendation_disabled`.
 - Alias weights `alias_weight_universal: 0.50`, `alias_weight_field: 0.50`, and
-  `alias_weight_window: 0.35` now govern both diagnostic and adoption scoring.
+  `alias_weight_window: 0.35` govern both diagnostic and adoption scoring.
   Only rank one has a stored sampling-window value in the adoption pass;
   other ranks retain universal/field scoring without a time-array window value.
 
 See [CHANGELOG.md](../CHANGELOG.md) for release changes.
+
+
+## Command-line options
+
+`groove --help` lists commands. `groove <command> --help` lists that command's
+flags. Analysis stages and `run` require `-c FILE` or `--config FILE`.
+
+| Commands | Additional options |
+|---|---|
+| All stages and `run` | `--rerun`, `--strict` |
+| `run` | `--skip-download`, `--skip-morphology`, `--n-jobs N` |
+| `periods` | `--n-jobs N` |
+| `download` | `--dry-run`, `--limit N` |
+| `morphology` | Stage-specific flags after `--`, such as `--mode map-only` |
+| `init [FILE]` | `--force` to overwrite a configuration |
+| `demo [DIRECTORY]` | `--extended`; no configuration or token needed |
+| `demo-check DIRECTORY` | Check an existing synthetic demonstration |
+| `targets CSV` | `--by COLUMN`, `--limit N`; no configuration needed |
+
+Use `groove --version` for the installed version. Besides `-h`/`--help` and
+`-c`/`--config`, stage options use their long forms; there are no general
+`-o` or `-i` shortcuts. Set paths and scientific choices in YAML.
+
+With an existing demo configuration, inspect the morphology parser with:
+
+```bash
+groove morphology -c groove_demo/run.yaml -- --help
+```
+
+The outer `--n-jobs` controls period workers. Morphology's separate
+`-- --n-jobs N` controls its own feature/plot workers. The pipeline derives
+morphology datasets and period-table paths from the top-level sample; advanced
+multi-dataset input is a separate morphology interface, not a replacement for
+the top-level pipeline schema.

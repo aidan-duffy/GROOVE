@@ -99,12 +99,13 @@ def standardise_lightcurve_file(path: Path, dataset: str, bands: Sequence[str]) 
 
     out = out.loc[out["filter"].isin(list(bands))]
     out = out.loc[np.isfinite(out["time"]) & np.isfinite(out["mag"])]
-    # Reject non-physical photometry. Negative or zero magnitudes, and anything
-    # outside a plausible ATLAS range, are failed measurements rather than data.
+    # Apply the magnitude range required by the ATLAS morphology feature loader.
+    # Other surveys need an appropriate input adapter and validated limits.
     out = out.loc[(out["mag"] > 0) & (out["mag"] > S.MAGNITUDE_RANGE[0])
                   & (out["mag"] < S.MAGNITUDE_RANGE[1])]
     if "flux" in out.columns:
-        # A negative ATLAS flux is a non-detection, not a faint measurement.
+        # Magnitude-space features require positive measured flux. Noise-consistent
+    # negative forced flux can survive cleaning but is unavailable here.
         out = out.loc[np.isfinite(out["flux"]) & (out["flux"] > 0)]
         out = out.drop(columns=["flux"])
     out = out.loc[out["source_id"].ne("")]

@@ -177,7 +177,7 @@ def choose_source_recommendations(summary_rows: list[dict[str, Any]]) -> pd.Data
       1. detection strength: strong/weak/non-variable evidence;
       2. warning flags: alias, harmonic, single-filter, filter-disagreement.
 
-    Alias/harmonic warnings no longer automatically erase a strong periodic
+    Alias/harmonic warnings do not automatically erase a strong periodic
     detection.  They alter confidence and are reported as flags, while the
     source can still be a strong_period.
     """

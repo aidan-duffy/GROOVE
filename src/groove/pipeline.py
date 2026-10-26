@@ -108,7 +108,7 @@ def run_periods(cfg: Config, rerun: bool = False) -> None:
     overridden = {k.lower() for k in cfg.periods}
     if "plot_time_segment_colors" not in overridden:
         S.PLOT_TIME_SEGMENT_COLORS = S.PLOT_TIME_COLOR_PALETTE[:int(S.PLOT_TIME_SEGMENTS)]
-    # derived settings that the original script computed at import time
+    # Recompute derived paths after applying configuration overrides.
     if "alias_memory_csv" not in {k.lower() for k in cfg.periods}:
         S.ALIAS_MEMORY_CSV = S.OUTPUT_DIR / "tables" / "field_alias_memory.csv"
     run.main()

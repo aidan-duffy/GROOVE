@@ -1,10 +1,10 @@
-"""groove: find periodic variability and deep occultations in ATLAS light curves.
+"""GROOVE: Grouping of Rare and Odd Objects via Variability Exploration.
 
 Pipeline stages (each is a sub-package with the same layout):
 
     download   -> raw ATLAS forced-photometry CSVs, one per star
     clean      -> point-level quality cuts
-    select     -> source-level usability cuts (thesis criteria)
+    select     -> source-level usability cuts
     periods    -> Lomb-Scargle / BLS period search with alias handling
     morphology -> folded-profile features, family rules and UMAP maps
 
@@ -12,7 +12,7 @@ Pipeline stages (each is a sub-package with the same layout):
 `groove.cli` exposes the `groove` command.
 """
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 
 import logging
 

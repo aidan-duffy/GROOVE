@@ -33,13 +33,10 @@ def empty_profile(n_bins: int) -> dict[str, Any]:
 
 
 def phase_profile(frame: pd.DataFrame, period: float, n_bins: int, origin: float) -> dict[str, Any]:
-    """
-    Binned phase profile plus a CORRECT significance.
+    """Binned phase profile and significance relative to the per-bin error.
 
-    FIX (defect A): the previous version divided the binned amplitude by the
-    per-point scatter, discarding the sqrt(N_per_bin) averaging and understating
-    a real detection by ~an order of magnitude.  Significance is now measured
-    against the per-bin standard error.
+    The per-bin standard error accounts for averaging multiple observations;
+    per-point scatter alone would understate the significance of a binned signal.
     """
     profile = empty_profile(n_bins)
     if frame.empty:
@@ -248,18 +245,12 @@ def lomb_scargle_power(times: Sequence[float], values: Sequence[float],
 def align_profile(values: Sequence[float], n_smooth: int = 3) -> tuple[np.ndarray, int]:
     """Rotate a phase profile to a canonical origin.
 
-    THE FIX FOR THE UMAP GROUPING FAILURE.  Phase is measured from the first
-    observation, which is an arbitrary epoch, so two identical stars observed on
-    different nights produced completely different 64-bin vectors: measured
-    correlation -0.998 and a euclidean distance 30x larger than between two
-    genuinely different stars.  UMAP was therefore clustering on epoch, not
-    morphology.
-
-    Rotating each profile so its faintest credible (deepest) point sits at bin
-    zero makes the block epoch-invariant.  A three-bin circular kernel is used
-    only to break noisy near-ties; the unsmoothed depth remains dominant, so a
-    narrow eclipse is not averaged away.  In a double-dip profile the deeper
-    credible dip therefore defines the origin consistently.
+    The first observation defines an arbitrary phase epoch. Aligning the
+    faintest credible point with bin zero prevents identical shapes observed
+    at different epochs from acquiring different mapping representations.
+    A three-bin circular kernel breaks noisy near-ties while the unsmoothed
+    depth remains dominant, preserving narrow eclipses. For double dips,
+    the deeper credible dip defines the origin.
     """
     v = _utils.circular_fill(np.asarray(values, dtype=float))
     n = len(v)
@@ -311,19 +302,12 @@ def fourier_descriptors(values: Sequence[float], n_harmonics: int = 4) -> dict[s
 
 def mirror_symmetry(profile: Sequence[float], noise_level: float = 0.0,
                     n_harmonics: int = 4) -> float:
-    """Fraction of harmonic power in the EVEN (cosine) terms about the extremum.
+    """Fraction of significant harmonic power in cosine terms about a trial axis.
 
-    NEW (defect: sine vs asymmetric).  Replaces sinusoid_residual_ratio as the
-    decision input.  A profile that is mirror-symmetric about its extremum is
-    purely cosine once re-referenced to that phase, so the odd (sine) power
-    vanishes and this returns ~1.  A sinusoid AND a triangular or sawtooth-ish
-    wave both score high, which is the behaviour asked for; a wave with a
-    leading/trailing shoulder scores low.
-
-    A direct mirror correlation was tried first and is not usable: the
-    reflection axis is only defined to within one bin, and for a noisy profile
-    the argmax can land on either the peak or the trough, so a pure sine scored
-    0.73 while an asymmetric profile scored 0.87.
+    A mirror-symmetric profile has little sine power when referenced to its
+    symmetry axis and scores near one. A leading or trailing shoulder lowers
+    this score. Harmonic power is used instead of direct bin reflection because
+    noise and discrete phase bins make a single-bin symmetry axis unstable.
     """
     v = _utils.circular_fill(np.asarray(profile, dtype=float))
     if not np.any(np.isfinite(v)) or np.nanstd(v) <= 0:
@@ -483,9 +467,9 @@ def profile_shape_metrics(normalised: Sequence[float], amplitude: float,
         "dip_width_bins": float(width),
         "secondary_dip_depth_norm": secondary,
         "secondary_dip_phase_separation": separation,
-        # NEW: separates a dip-shaped fold (>>1) from a sinusoid (~1)
+        # Separates a dip-shaped fold (>>1) from a sinusoid (~1).
         "dip_dominance": float(dip_depth / max(flare_depth, 1e-9)),
-        # NEW: dip depth in units of the per-bin error, in magnitudes
+        # Dip depth in magnitudes, expressed in units of the per-bin error.
         "dip_significance": float(dip_depth * amp / sig) if np.isfinite(amp) else np.nan,
         "mirror_symmetry": mirror_symmetry(values, noise_level=sig / max(abs(amp), 1e-9)),
         "profile_peak_count": float(profile_peak_count(
@@ -625,7 +609,7 @@ def residual_event_metrics(frame: pd.DataFrame, profiles: Mapping[str, Mapping[s
     metrics = {
         "flare_event_count": float(n_flare),
         "dimming_event_count": float(n_dim),
-        # NEW: noise gives ~0.5, real flares ~1.0
+        # Positive-excursion asymmetry: symmetric noise is near 0.5.
         "flare_asymmetry": float(n_flare / total) if total else 0.0,
         "flare_point_fraction": float(np.mean((z_safe < -sigma_threshold)[finite])),
         "dimming_point_fraction": float(np.mean((z_safe > sigma_threshold)[finite])),
@@ -650,10 +634,10 @@ def residual_event_metrics(frame: pd.DataFrame, profiles: Mapping[str, Mapping[s
 
 def cycles_with_dip(times: np.ndarray, mags: np.ndarray, period: float, origin: float,
                     dip_phase: float, half_width_phase: float) -> int:
-    """Distinct integer phase cycles containing an in-dip point.
+    """Count distinct integer phase cycles containing an in-dip point.
 
-    FIX: replaces coherent_dip_sections, which counted chronological quarters and
-    so rejected any dipper whose eclipses fall in one part of the baseline.
+    Counting cycles rather than chronological sections permits periodic dips
+    confined by seasonal coverage to one part of the observing baseline.
     """
     if not np.isfinite(period) or period <= 0 or not len(times):
         return 0
@@ -1100,7 +1084,7 @@ def extract_source_features(source: Mapping[str, Any], period_record: Mapping[st
         "filters_used": _utils.join_tags(b for b in ("c", "o") if len(band_frames[b])),
         "selected_filter_or_consensus": selected,
         "c_band_weight": weights["c"], "o_band_weight": weights["o"],
-        # --- the corrected significance
+        # --- significance relative to the per-bin error
         "profile_chi2": _utils.finite_float(consensus.get("profile_chi2"), 0.0),
         "profile_snr": _utils.finite_float(consensus.get("profile_snr"), 0.0),
         "c_profile_chi2": c_chi2, "o_profile_chi2": o_chi2,
@@ -1160,8 +1144,8 @@ def extract_source_features(source: Mapping[str, Any], period_record: Mapping[st
         "fourier_phi21", "fourier_phi31", "fourier_phi41",
     )
     # The classifier and measurements retain the full 64-bin profile.  Only the
-    # mapping representation is reduced to 32 bins so narrow dips retain twice
-    # the former resolution.  Weak/poorly covered profiles contribute no
+    # mapping representation is reduced to 32 bins. The 64-bin measurement
+    # profile preserves narrow-dip detail. Weak/poorly covered profiles contribute no
     # phase-anchored shape, preventing arbitrary noise alignment from becoming
     # apparent morphology; their scalar quality descriptors remain present.
     map_bins = int(config.get("umap_phase_bins", 32))
@@ -1278,7 +1262,7 @@ def _feature_worker(source: Mapping[str, Any], period_record: Mapping[str, Any] 
     Only the compact summary and feature vectors travel back to the parent. A
     heavy record (light curve, profiles, residuals) is cached only when an
     external detailed diagnostic is unavailable; production morphology plots
-    are rendered directly from the already-loaded raw O-band source mapping.
+    are rendered from the already-loaded source mapping and accepted filters.
     """
     cache = Path(path)
     light_cache = cache.with_suffix(".light.joblib")
