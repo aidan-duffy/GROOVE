@@ -79,6 +79,9 @@ artificial. This is an installation and integration demonstration, not a
 survey completeness measurement. To deliberately recalculate the fitted morphology stage, use
 `groove morphology -c groove_demo/run.yaml --rerun`.
 
+For a larger, 24-source example, use `groove demo groove_demo --extended`
+instead of the first command above (choose a new or empty destination).
+
 ## Download ATLAS photometry
 
 1. Create a CSV with a source ID and coordinates in degrees, for example:

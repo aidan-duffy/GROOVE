@@ -9,6 +9,7 @@ from pathlib import Path
 
 import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
 
 # Colour-blind-safe palette (Okabe & Ito), used for filters and categories.
 FILTER_COLOURS = {"c": "#56B4E9", "o": "#E69F00"}
@@ -19,6 +20,14 @@ BAD = "#CC79A7"
 
 DEFAULT_DPI = 150
 FIGURE_SIZES = {"single": (8, 5), "wide": (12, 5), "panel": (12, 8)}
+
+
+def phase_focus_mask(phase, two_cycles: bool = True) -> np.ndarray:
+    """Colour the central cycle of a double fold; retain single-cycle colours."""
+    phase = np.asarray(phase, dtype=float)
+    if not two_cycles:
+        return np.ones(phase.shape, dtype=bool)
+    return (phase >= 0.5) & (phase <= 1.5)
 
 
 def use_house_style(dpi: int = DEFAULT_DPI) -> None:

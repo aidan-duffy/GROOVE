@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Mention the optional 24-source extended demo in the README.
+- Toggle interactive-map previews on repeated point clicks; retain legend and zoom double-click controls.
+- Emphasise phase 0.5--1.5 in double-phase plots and grey the repeated sections, including median curves.
+- Honour the configured single-cycle display when constructing period-plot phase arrays.
+- Document regeneration of phase-only morphology images and map controls without refitting.
+
 ## 1.1.1
 
 Documentation, comments and metadata only; calculations and thresholds are unchanged.

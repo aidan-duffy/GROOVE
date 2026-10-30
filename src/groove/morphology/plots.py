@@ -17,6 +17,7 @@ from matplotlib.lines import Line2D
 
 from .. import execution as _execution
 from .. import resume as R
+from ..core.plotstyle import phase_focus_mask
 from . import classify as _classify
 from . import embedding as _embedding
 from . import features as _features
@@ -71,7 +72,7 @@ def build_neighbour_review_pages(validation: pd.DataFrame, table: pd.DataFrame,
 
 def _fold_scatter(ax, frame: pd.DataFrame, period: float, origin: float,
                   n_sections: int = 4) -> None:
-    """Show every accepted band, centring their magnitudes when both are present."""
+    """Colour phase 0.5--1.5 and grey its repeats; centre multiple bands."""
     if not np.isfinite(period) or period <= 0 or frame.empty:
         ax.text(0.5, 0.5, "no usable photometry or recommended period",
                 ha="center", va="center", transform=ax.transAxes)
@@ -91,11 +92,18 @@ def _fold_scatter(ax, frame: pd.DataFrame, period: float, origin: float,
             mask = local_sections == section
             if not mask.any():
                 continue
-            ax.plot(np.r_[phase[mask], phase[mask] + 1.0], np.r_[mags[mask], mags[mask]],
-                    marker="o" if band == "c" else "s", markersize=2.0,
-                    linestyle="none", alpha=0.55,
-                    color=S.SECTION_COLOURS[section % len(S.SECTION_COLOURS)],
-                    rasterized=True, label=f'{band.upper()!s} Q{int(section + 1):d}')
+            repeated_phase = np.r_[phase[mask], phase[mask] + 1.0]
+            repeated_mags = np.r_[mags[mask], mags[mask]]
+            focus = phase_focus_mask(repeated_phase)
+            for visible, colour, label in (
+                (~focus, "0.7", "_nolegend_"),
+                (focus, S.SECTION_COLOURS[section % len(S.SECTION_COLOURS)],
+                 f'{band.upper()!s} Q{int(section + 1):d}'),
+            ):
+                ax.plot(repeated_phase[visible], repeated_mags[visible],
+                        marker="o" if band == "c" else "s", markersize=2.0,
+                        linestyle="none", alpha=0.55, color=colour,
+                        rasterized=True, label=label)
         n_bins = 80
         bins = np.minimum((phase * n_bins).astype(int), n_bins - 1)
         centres = (np.arange(n_bins, dtype=float) + 0.5) / n_bins
@@ -105,7 +113,12 @@ def _fold_scatter(ax, frame: pd.DataFrame, period: float, origin: float,
             if len(values) >= 2:
                 medians[index] = np.median(values)
         if np.isfinite(medians).sum() >= 4:
-            ax.plot(np.r_[centres, centres + 1.0], np.r_[medians, medians],
+            repeated_centres = np.r_[centres, centres + 1.0]
+            repeated_medians = np.r_[medians, medians]
+            focus = phase_focus_mask(repeated_centres)
+            ax.plot(repeated_centres, np.where(~focus, repeated_medians, np.nan),
+                    color="0.65", linewidth=1.0, alpha=0.6, zorder=9)
+            ax.plot(repeated_centres, np.where(focus, repeated_medians, np.nan),
                     color="teal" if band == "c" else "black", linewidth=1.0,
                     alpha=0.8, label=f"{band.upper()} bin median", zorder=10)
     ax.invert_yaxis()
@@ -521,7 +534,9 @@ def make_interactive_map(table: pd.DataFrame, x_col: str, y_col: str, title: str
                 customdata=point_details, name=str(label), marker={'size': 18, 'symbol': 'star', 'color': '#FFD54F',
                                          'line': {'color': 'black', 'width': 1.5}}, hoverinfo='skip'))
     chart.update_layout(title=title, xaxis_title='UMAP 1', yaxis_title='UMAP 2',
-                        template='plotly_white', height=750, dragmode='zoom', legend={'groupclick': 'togglegroup'},
+                        template='plotly_white', height=750, dragmode='zoom',
+                        legend={'groupclick': 'togglegroup', 'itemclick': 'toggle',
+                                'itemdoubleclick': 'toggleothers'},
                         margin={'l': 60, 'r': 30, 't': 90, 'b': 50})
     script = """
 const graph = document.getElementById('{plot_id}');
@@ -531,7 +546,7 @@ panel.style.cssText = 'font:15px sans-serif;margin:20px';
 const heading = document.createElement('h2');
 heading.textContent = 'Compare selected light curves';
 const help = document.createElement('p');
-help.textContent = 'Drag on the map or use the mouse wheel to zoom; double-click to reset. Use the toolbar to pan or select several points. Click points to add previews below; click a preview to open it at full size.';
+help.textContent = 'Drag on the map or use the mouse wheel to zoom; double-click to reset. Click a legend entry to hide/show its group; double-click it to isolate/restore. Use the toolbar to pan or select several points. Click a point to add or remove its preview below; click a preview to open it at full size.';
 const clear = document.createElement('button');
 clear.textContent = 'Clear selection';
 clear.disabled = true;
@@ -587,7 +602,19 @@ function addPreview(detail) {
     selected.set(key, card); board.appendChild(card); updateCount();
 }
 graph.on('plotly_click', function(event) {
-    (event.points || []).forEach(point => addPreview(point.customdata));
+    const handled = new Set();
+    (event.points || []).forEach(function(point) {
+        const detail = point.customdata;
+        if (!detail) return;
+        const key = JSON.stringify([detail[1], detail[0]]);
+        if (handled.has(key)) return;
+        handled.add(key);
+        if (selected.has(key)) {
+            selected.get(key).remove(); selected.delete(key); updateCount();
+        } else {
+            addPreview(detail);
+        }
+    });
 });
 graph.on('plotly_selected', function(event) {
     if (event) (event.points || []).forEach(point => addPreview(point.customdata));

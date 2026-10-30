@@ -1,9 +1,14 @@
 """Plot changes preserve scientific state and identify dataset membership."""
 import argparse
 import hashlib
+import json
+import shutil
+import subprocess
+
 import pandas as pd
 import pytest
-from groove.morphology import plots, persistence
+
+from groove.morphology import persistence, plots
 
 
 def table():
@@ -36,6 +41,58 @@ def test_interactive_dataset_shapes_and_comparison_controls(tmp_path):
     assert 'height:320px;object-fit:contain' in html
     assert 'flex-wrap:wrap' in html
     assert '"scrollZoom": true' in html and '"displayModeBar": true' in html
+    assert '"itemclick":"toggle"' in html
+    assert '"itemdoubleclick":"toggleothers"' in html
+
+
+@pytest.mark.skipif(shutil.which('node') is None, reason='Node.js is needed for the DOM event check')
+def test_interactive_preview_click_toggles_and_selection_remains_additive(tmp_path):
+    plots.make_interactive_map(table(), 'combined_umap_1', 'combined_umap_2',
+        'Test', 'test', tmp_path, {}, False)
+    html = (tmp_path / 'maps/test_interactive.html').read_text(encoding='utf-8')
+    script = 'const graph = document.getElementById' + html.rsplit(
+        'const graph = document.getElementById', 1)[1].split('</script>', 1)[0]
+    script = script.rsplit('updateCount();', 1)[0] + 'updateCount();'
+    harness = r'''
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+const handlers = {};
+class Element {
+    constructor(tag) { this.tag = tag; this.children = []; this.style = {}; this.listeners = {}; }
+    append(...items) { items.forEach(item => { item.parent = this; this.children.push(item); }); }
+    appendChild(item) { this.append(item); }
+    replaceChildren(...items) { this.children = []; this.append(...items); }
+    setAttribute() {}
+    addEventListener(name, handler) { this.listeners[name] = handler; }
+    remove() { this.parent.children = this.parent.children.filter(item => item !== this); }
+    after() {}
+}
+const graph = {id: 'test', on: (event, handler) => { handlers[event] = handler; }, after() {}};
+const document = {getElementById: () => graph, createElement: tag => new Element(tag)};
+const check = `
+const a = ['100', 'reference', 'wavelike', 8, '', ''];
+const b = ['101', 'reference', 'wavelike', 8, '', ''];
+const point = detail => ({points: [{customdata: detail}]});
+handlers.plotly_click(point(a)); assert.equal(board.children.length, 1);
+handlers.plotly_click(point(a)); assert.equal(board.children.length, 0);
+handlers.plotly_click(point(a)); assert.equal(board.children.length, 1);
+handlers.plotly_click({points: [{customdata: a}, {customdata: a}]});
+assert.equal(board.children.length, 0);
+handlers.plotly_selected({points: [{customdata: a}, {customdata: b}]});
+handlers.plotly_selected(point(a)); assert.equal(board.children.length, 2);
+handlers.plotly_selected(null); assert.equal(board.children.length, 2);
+handlers.plotly_click(point(a)); assert.equal(board.children.length, 1);
+handlers.plotly_click(point(a)); assert.equal(board.children.length, 2);
+board.children[0].children[1].listeners.click(); assert.equal(board.children.length, 1);
+clear.listeners.click(); assert.equal(board.children.length, 0);
+assert.equal(status.textContent, '0 selected'); assert.equal(clear.disabled, true);
+`;
+vm.runInNewContext(SCRIPT + check, {document, handlers, assert});
+'''
+    check = tmp_path / 'preview_events.cjs'
+    check.write_text('const SCRIPT = ' + json.dumps(script) + ';\n' + harness, encoding='utf-8')
+    result = subprocess.run([shutil.which('node'), str(check)], capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
 
 
 def test_map_only_preserves_catalogue_and_models(tmp_path, monkeypatch):

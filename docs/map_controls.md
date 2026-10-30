@@ -121,7 +121,9 @@ while preserving classifications, periods, coordinates and overview maps.
 ## Zoom and navigate
 
 Drag a rectangle or use the mouse wheel to zoom. The toolbar offers zoom, pan,
-reset and lasso/box selection. Double-click resets the axes. Zoom changes only
+reset and lasso/box selection. Click a legend entry to hide or show its group; double-click a legend entry
+to isolate that group or restore the others. Double-click inside the map resets
+the axes. Zoom changes only
 the view. Switch back to zoom in the toolbar after selecting points.
 
 ## Compare several sources
@@ -129,8 +131,9 @@ the view. Switch back to zoom in the toolbar after selecting points.
 Click multiple points to keep phase-image previews below an interactive map.
 Cards are capped at 420 pixels wide with a 320-pixel image area; they wrap into
 rows and fit narrow screens. A single selection does not expand across the page.
-Repeated clicks do not duplicate a source. Lasso or box selection adds several
-points at once. Use Remove on an individual card or Clear selection for all.
+Click the same point again to remove its preview; click once more to add it
+back. Lasso or box selection adds several points without removing existing
+previews. Use Remove on an individual card or Clear selection for all.
 Click a preview to open its full-size PNG. Selection is local to the page.
 
 Plotly is embedded for offline use. Images use relative links: preserve the
@@ -154,3 +157,32 @@ for your own data. Inspect options with:
 ```bash
 groove morphology -c "$map_root/batch/run.yaml" -- --help
 ```
+
+## Redraw phase folds without a periodogram
+
+Morphology writes standalone phase folds to
+`results/plots/ML/<model_version>/source_plots/phase_folded/` for the default
+output layout. Their recommended periods come from the saved catalogue;
+LS/BLS periodograms are separate products of the period stage.
+
+After updating GROOVE, regenerate those images from the original configuration
+and accepted light curves, then rebuild the HTML controls:
+
+```bash
+groove morphology -c run.yaml -- --mode plot-only --overwrite
+groove morphology -c run.yaml -- --mode map-only
+```
+
+Use the same `morphology.model_version` as the existing saved run (or pass
+`--model-version YOUR_SAVED_RUN` after `--` in both commands). Plot-only needs
+the configured light curves and saved catalogue. These commands retain saved
+periods, labels, models and UMAP coordinates; they do not run a period search.
+The phase images are PNGs. Single-source classification also creates phase
+folds without fitting UMAP: use `groove morphology -c run.yaml -- --mode classify`
+after cleaning, selection and period searching (see [stages](stages.md)).
+
+Double-phase plots span 0--2: phases 0.5--1.5 retain the chronological colours,
+while the repeated observations and binned-median curves outside that interval
+are grey. This also applies to period-stage folds, including alias/harmonic
+panels. Single-cycle period plots keep their colours across 0--1. The display
+change does not alter the folding origin, period or photometry.

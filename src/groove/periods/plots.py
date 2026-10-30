@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 from .. import execution as _execution
+from ..core.plotstyle import phase_focus_mask
 from . import aliases as _aliases
 from . import classify as _classify
 from . import files as _files
@@ -143,7 +144,7 @@ def plot_best_per_star(
         if S.FORCED_FOLD_PERIOD_DAYS is not None
         else automatic_fold_period
     )
-    phase = _folding.fold_phase(prepared["time"], fold_period)
+    phase = _folding.fold_phase(prepared["time"], fold_period, S.PLOT_TWO_PHASE_CYCLES)
     plot_signal = _folding.repeated(prepared["plot_signal"])
     plot_error = _folding.repeated(prepared["plot_error"])
     bands = _folding.repeated(prepared["band"])
@@ -161,17 +162,23 @@ def plot_best_per_star(
     time_segment = _folding.repeated(original_time_segment)
     keep = _folding.plot_sigma_mask(plot_signal, bands)
     segment_edges_years = np.linspace(0.0, time_span / 365.25, S.PLOT_TIME_SEGMENTS + 1)
+    focus = phase_focus_mask(phase, S.PLOT_TWO_PHASE_CYCLES)
     for segment in range(S.PLOT_TIME_SEGMENTS):
         for band in sorted(set(bands.astype(str))):
             use = (time_segment == segment) & (bands.astype(str) == band) & keep
             if not np.any(use):
                 continue
-            ax_fold.errorbar(
-                phase[use], plot_signal[use], yerr=plot_error[use],
-                ms=2.5, alpha=0.55, elinewidth=0.5, capsize=0,
-                marker=S.BAND_MARKERS.get(band, "."), linestyle="none",
-                color=S.PLOT_TIME_SEGMENT_COLORS[segment],
-            )
+            for visible, colour in (
+                (use & ~focus, "0.7"),
+                (use & focus, S.PLOT_TIME_SEGMENT_COLORS[segment]),
+            ):
+                if np.any(visible):
+                    ax_fold.errorbar(
+                        phase[visible], plot_signal[visible], yerr=plot_error[visible],
+                        ms=2.5, alpha=0.55, elinewidth=0.5, capsize=0,
+                        marker=S.BAND_MARKERS.get(band, "."), linestyle="none",
+                        color=colour,
+                    )
 
     # Keep time colours and filter markers in separate legends so that both
     # meanings stay clear on combined c/o plots.
@@ -265,7 +272,7 @@ def plot_best_per_star(
 # =============================================================================
 def plot_diagnostic_fold_axis(ax: Any, prepared: dict[str, Any], period: float) -> None:
     """Plot one phase fold using the same time colours and band markers."""
-    phase = _folding.fold_phase(prepared["time"], period)
+    phase = _folding.fold_phase(prepared["time"], period, S.PLOT_TWO_PHASE_CYCLES)
     plot_signal = _folding.repeated(prepared["plot_signal"])
     plot_error = _folding.repeated(prepared["plot_error"])
     bands = _folding.repeated(prepared["band"]).astype(str)
@@ -283,18 +290,24 @@ def plot_diagnostic_fold_axis(ax: Any, prepared: dict[str, Any], period: float) 
         original_segment = np.zeros(len(original_time), dtype=int)
     time_segment = _folding.repeated(original_segment)
     keep = _folding.plot_sigma_mask(plot_signal, bands)
+    focus = phase_focus_mask(phase, S.PLOT_TWO_PHASE_CYCLES)
 
     for segment in range(S.PLOT_TIME_SEGMENTS):
         for band in sorted(set(bands)):
             use = (time_segment == segment) & (bands == band) & keep
             if not np.any(use):
                 continue
-            ax.errorbar(
-                phase[use], plot_signal[use], yerr=plot_error[use],
-                ms=2.3, alpha=0.55, elinewidth=0.45, capsize=0,
-                marker=S.BAND_MARKERS.get(band, "."), linestyle="none",
-                color=S.PLOT_TIME_SEGMENT_COLORS[segment],
-            )
+            for visible, colour in (
+                (use & ~focus, "0.7"),
+                (use & focus, S.PLOT_TIME_SEGMENT_COLORS[segment]),
+            ):
+                if np.any(visible):
+                    ax.errorbar(
+                        phase[visible], plot_signal[visible], yerr=plot_error[visible],
+                        ms=2.3, alpha=0.55, elinewidth=0.45, capsize=0,
+                        marker=S.BAND_MARKERS.get(band, "."), linestyle="none",
+                        color=colour,
+                    )
 
     ax.set_xlim(0.0, 2.0 if S.PLOT_TWO_PHASE_CYCLES else 1.0)
     ax.set_xlabel("Phase")
