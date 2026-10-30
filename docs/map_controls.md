@@ -177,6 +177,9 @@ Chronological Q1--Q4 groups are calculated from the displayed observations.
 The YAML is the original pipeline config, not the resolved morphology-only
 configuration. Use `--catalogue path/to/all_sources.csv` to select a saved
 morphology catalogue explicitly if necessary.
+Use `--point-size 2.5 --point-alpha 0.8` to change this export's marker diameter
+and opacity only. Without these overrides it uses the morphology marker
+settings in the YAML.
 
 ## Redraw phase folds without a periodogram
 

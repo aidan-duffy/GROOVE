@@ -73,8 +73,13 @@ def create(directory: str | Path, *, extended: bool = False) -> Path:
             "max_period_days": 50,
             "run_bls": False,
             "plot_time_segments": 4,
+            "plot_marker_size": 3.5,
+            "plot_marker_alpha": 0.85,
         },
-        "morphology": {"mode": "fit", "model_version": "demo", "n_jobs": 1},
+        "morphology": {
+            "mode": "fit", "model_version": "demo", "n_jobs": 1,
+            "review_plot_marker_size": 3.0, "review_plot_marker_alpha": 0.8,
+        },
     }
     if extended:
         cfg["name"] = "synthetic_extended"

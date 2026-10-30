@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from .. import execution as _execution
-from ..core.plotstyle import LIGHTCURVE_ALPHA, lightcurve_marker_style, phase_focus_mask
+from ..core.plotstyle import lightcurve_marker_style, phase_focus_mask
 from . import aliases as _aliases
 from . import classify as _classify
 from . import files as _files
@@ -187,8 +187,8 @@ def plot_best_per_star(
                 if np.any(visible):
                     ax_fold.errorbar(
                         phase[visible], plot_signal[visible], yerr=plot_error[visible],
-                        alpha=LIGHTCURVE_ALPHA, elinewidth=0.35, capsize=0,
-                        **lightcurve_marker_style(band, multiple_bands, S.BAND_MARKERS.get(band, "o")),
+                        alpha=S.PLOT_MARKER_ALPHA, elinewidth=0.35, capsize=0,
+                        **lightcurve_marker_style(band, multiple_bands, S.BAND_MARKERS.get(band, "o"), S.PLOT_MARKER_SIZE),
                         linestyle="none",
                         color=colour,
                     )
@@ -213,8 +213,8 @@ def plot_best_per_star(
     band_handles = []
     for band in sorted(set(bands.astype(str))):
         handle = ax_fold.plot(
-            [], [], color="0.35", alpha=LIGHTCURVE_ALPHA,
-            **lightcurve_marker_style(band, multiple_bands, S.BAND_MARKERS.get(band, "o")),
+            [], [], color="0.35", alpha=S.PLOT_MARKER_ALPHA,
+            **lightcurve_marker_style(band, multiple_bands, S.BAND_MARKERS.get(band, "o"), S.PLOT_MARKER_SIZE),
             linestyle="none",
             label=f"{band}-band marker" if band != "single" else "data marker",
         )[0]
@@ -317,8 +317,8 @@ def plot_diagnostic_fold_axis(ax: Any, prepared: dict[str, Any], period: float) 
                 if np.any(visible):
                     ax.errorbar(
                         phase[visible], plot_signal[visible], yerr=plot_error[visible],
-                        alpha=LIGHTCURVE_ALPHA, elinewidth=0.35, capsize=0,
-                        **lightcurve_marker_style(band, multiple_bands, S.BAND_MARKERS.get(band, "o")),
+                        alpha=S.PLOT_MARKER_ALPHA, elinewidth=0.35, capsize=0,
+                        **lightcurve_marker_style(band, multiple_bands, S.BAND_MARKERS.get(band, "o"), S.PLOT_MARKER_SIZE),
                         linestyle="none",
                         color=colour,
                     )
@@ -355,7 +355,7 @@ def diagnostic_legend_handles(ax: Any, prepared: dict[str, Any]) -> tuple[list[A
         band_handles.append(
             ax.plot(
                 [], [], color="0.35", alpha=0.55,
-                **lightcurve_marker_style(band, multiple_bands, S.BAND_MARKERS.get(band, "o")),
+                **lightcurve_marker_style(band, multiple_bands, S.BAND_MARKERS.get(band, "o"), S.PLOT_MARKER_SIZE),
                 linestyle="none",
                 label=f"{band}-band" if band != "single" else "data",
             )[0]

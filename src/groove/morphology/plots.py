@@ -17,7 +17,7 @@ from matplotlib.lines import Line2D
 
 from .. import execution as _execution
 from .. import resume as R
-from ..core.plotstyle import LIGHTCURVE_ALPHA, lightcurve_marker_style, phase_focus_mask
+from ..core.plotstyle import LIGHTCURVE_ALPHA, LIGHTCURVE_POINT_SIZE, lightcurve_marker_style, phase_focus_mask
 from . import classify as _classify
 from . import embedding as _embedding
 from . import features as _features
@@ -71,12 +71,15 @@ def build_neighbour_review_pages(validation: pd.DataFrame, table: pd.DataFrame,
 
 
 def _fold_scatter(ax, frame: pd.DataFrame, period: float, origin: float,
-                  n_sections: int = 4) -> None:
+                  n_sections: int = 4, point_size: float = LIGHTCURVE_POINT_SIZE,
+                  point_alpha: float = LIGHTCURVE_ALPHA) -> None:
     """Colour phase 0.5--1.5 and grey its repeats; centre multiple bands."""
     if not np.isfinite(period) or period <= 0 or frame.empty:
         ax.text(0.5, 0.5, "no usable photometry or recommended period",
                 ha="center", va="center", transform=ax.transAxes)
         return
+    if not np.isfinite(point_alpha) or not 0 < point_alpha <= 1:
+        raise ValueError("Light-curve marker alpha must be greater than zero and at most one")
     times = frame["time"].to_numpy(dtype=float)
     sections = _features.chronological_sections(times, n_sections)
     bands = frame["filter"].astype(str).str.lower().to_numpy()
@@ -101,8 +104,8 @@ def _fold_scatter(ax, frame: pd.DataFrame, period: float, origin: float,
                  f'{band.upper()!s} Q{int(section + 1):d}'),
             ):
                 ax.plot(repeated_phase[visible], repeated_mags[visible],
-                        **lightcurve_marker_style(band, multiple),
-                        linestyle="none", alpha=LIGHTCURVE_ALPHA, color=colour,
+                        **lightcurve_marker_style(band, multiple, point_size=point_size),
+                        linestyle="none", alpha=point_alpha, color=colour,
                         rasterized=True, label=label)
         n_bins = 80
         bins = np.minimum((phase * n_bins).astype(int), n_bins - 1)
@@ -128,15 +131,17 @@ def _fold_scatter(ax, frame: pd.DataFrame, period: float, origin: float,
 
 
 def create_fold_plot(record: Mapping[str, Any], row: Mapping[str, Any], output: Path,
-                     dpi: int = 110) -> None:
+                     dpi: int = 110, point_size: float = LIGHTCURVE_POINT_SIZE,
+                     point_alpha: float = LIGHTCURVE_ALPHA) -> None:
     """Accepted-band double-phase fold at the saved recommended period."""
     fig, ax = plt.subplots(figsize=(5.2, 3.6))
     period = _utils.finite_float(row.get("recommended_period_days"))
-    _fold_scatter(ax, record["data"], period, record["origin"])
+    _fold_scatter(ax, record["data"], period, record["origin"],
+                  point_size=point_size, point_alpha=point_alpha)
     ax.set_title("{}\n{} | recommended P={:.5g} d | conf={:.2f}".format(
         row.get("source_id", ""), row.get("final_primary_tag", ""),
         period, _utils.finite_float(row.get("final_confidence"), 0.0)), fontsize=8)
-    ax.legend(fontsize=6, markerscale=3, loc="best", framealpha=0.7)
+    ax.legend(fontsize=6, markerscale=max(1.0, 4.0 / point_size), loc="best", framealpha=0.7)
     fig.subplots_adjust(left=0.13, right=0.97, top=0.84, bottom=0.15)
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output, dpi=dpi)
@@ -152,7 +157,9 @@ def create_review_plot(record: Mapping[str, Any], row: Mapping[str, Any], output
     evidence in detail.
     """
     create_fold_plot(record, row, output,
-                     dpi=int(config.get("review_plot_dpi", 110)))
+                     dpi=int(config.get("review_plot_dpi", 110)),
+                     point_size=float(config.get("review_plot_marker_size", LIGHTCURVE_POINT_SIZE)),
+                     point_alpha=float(config.get("review_plot_marker_alpha", LIGHTCURVE_ALPHA)))
 
 
 def build_family_maps(records: Sequence[Mapping[str, Any]], table: pd.DataFrame,
@@ -701,7 +708,9 @@ def _plot_worker(cache_file: str, row: Mapping[str, Any], config: Mapping[str, A
         return str(row.get("source_key", "")), None
     try:
         create_fold_plot(record, row, Path(fold_path),
-                         dpi=int(config.get("review_plot_dpi", 110)))
+                         dpi=int(config.get("review_plot_dpi", 110)),
+                         point_size=float(config.get("review_plot_marker_size", LIGHTCURVE_POINT_SIZE)),
+                         point_alpha=float(config.get("review_plot_marker_alpha", LIGHTCURVE_ALPHA)))
     except Exception as _caught_error:
         _execution.report_exception(_caught_error, __name__)
         return str(row.get("source_key", "")), None
@@ -752,13 +761,15 @@ def generate_plots(records: Sequence[Mapping[str, Any]], table: pd.DataFrame,
 
 
 def _phase_fold_plot_worker(source: Mapping[str, Any], row: Mapping[str, Any],
-                            output_path: str, dpi: int, force: bool
+                            output_path: str, dpi: int, force: bool,
+                            point_size: float = LIGHTCURVE_POINT_SIZE,
+                            point_alpha: float = LIGHTCURVE_ALPHA
                             ) -> tuple[str, str | None, str | None]:
     """Write a phase fold from the accepted filters without reclassification."""
     output = Path(output_path)
     key = str(row.get("source_key", ""))
     cache = R.ProductStore(output.parent / '.receipts', R.hash_value([
-        source.get('file_fingerprint'), row.get('recommended_period_days'), dpi]), force)
+        source.get('file_fingerprint'), row.get('recommended_period_days'), dpi, point_size, point_alpha]), force)
     if cache.current(output):
         return key, str(output), None
     data = source.get("data")
@@ -773,7 +784,7 @@ def _phase_fold_plot_worker(source: Mapping[str, Any], row: Mapping[str, Any],
     record = {"data": o_data, "origin": float(o_data["time"].min())}
     temporary = output.with_name(output.stem + ".tmp.png")
     try:
-        create_fold_plot(record, row, temporary, dpi=dpi)
+        create_fold_plot(record, row, temporary, dpi=dpi, point_size=point_size, point_alpha=point_alpha)
         temporary.replace(output)
         cache.record(output)
     except Exception as error:
@@ -808,7 +819,9 @@ def generate_phase_fold_products(sources: Mapping[str, Mapping[str, Any]],
         source = sources.get(key) or by_source_id.get(source_id)
         cache = R.ProductStore(output.parent / '.receipts', R.hash_value([
             (source or {}).get('file_fingerprint'), row.get('recommended_period_days'),
-            int(config.get('review_plot_dpi', 110))]), force)
+            int(config.get('review_plot_dpi', 110)),
+            float(config.get('review_plot_marker_size', LIGHTCURVE_POINT_SIZE)),
+            float(config.get('review_plot_marker_alpha', LIGHTCURVE_ALPHA))]), force)
         if cache.current(output):
             resolved[key] = output
             continue
@@ -830,13 +843,15 @@ def generate_phase_fold_products(sources: Mapping[str, Mapping[str, Any]],
                 len(resolved), len(jobs), len(missing))
     n_jobs = int(config.get("n_jobs", -1))
     dpi = int(config.get("review_plot_dpi", 110))
+    point_size = float(config.get("review_plot_marker_size", LIGHTCURVE_POINT_SIZE))
+    point_alpha = float(config.get("review_plot_marker_alpha", LIGHTCURVE_ALPHA))
     if n_jobs == 1 or len(jobs) < 8:
-        results = [_phase_fold_plot_worker(source, row, path, dpi, force)
+        results = [_phase_fold_plot_worker(source, row, path, dpi, force, point_size, point_alpha)
                    for source, row, path in jobs]
     else:
         results = joblib.Parallel(n_jobs=n_jobs, backend="loky", verbose=0,
                                   batch_size=8, max_nbytes="50M")(
-            joblib.delayed(_phase_fold_plot_worker)(source, row, path, dpi, force)
+            joblib.delayed(_phase_fold_plot_worker)(source, row, path, dpi, force, point_size, point_alpha)
             for source, row, path in jobs)
     for key, path, error in results:
         if path:

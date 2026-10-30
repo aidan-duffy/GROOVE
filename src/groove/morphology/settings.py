@@ -137,6 +137,8 @@ DEFAULTS: Dict[str, Any] = {
     "appendix_per_page": 9,
     "appendix_max_pages": 0,
     "review_plot_dpi": 110,
+    "review_plot_marker_size": 2.0,
+    "review_plot_marker_alpha": 0.55,
     "n_jobs": -1,
     "existing_id_policy": "skip",
     "outline_new_sources": None,

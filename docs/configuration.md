@@ -30,6 +30,26 @@ retain their meaning. Cleaning examples use small round measurements and
 small crosses for rejected points. Dataset shapes on UMAP maps remain
 controlled separately by `morphology.dataset_markers`.
 
+The standard marker diameter is 2 points (2.3 for open C-band circles in
+mixed-band folds). Set display size and opacity in the existing configuration:
+
+```yaml
+periods:
+  plot_marker_size: 2.0
+  plot_marker_alpha: 0.55
+morphology:
+  review_plot_marker_size: 2.0
+  review_plot_marker_alpha: 0.55
+```
+
+Sizes are positive diameters in points; opacity is greater than 0 and at most 1.
+New demo configurations use 3.5 points / 0.85 opacity for period panels and
+3 points / 0.8 opacity for morphology folds. Synthetic measurements and sampling
+are unchanged. These controls affect the display, not scientific features or
+classifications. Phase-only plot receipts include both controls so changing
+them refreshes those images. Choose a fresh demo folder to generate the new
+configuration; an existing `run.yaml` is not rewritten automatically.
+
 | Section/key | Default or purpose |
 |---|---|
 | name | Dataset name recorded in tables and map hover; use this name for shapes |

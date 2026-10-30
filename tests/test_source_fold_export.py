@@ -40,9 +40,9 @@ def test_export_retains_saved_period_origin_and_inputs(tmp_path, monkeypatch, ba
     captured = []
     create = plots.create_fold_plot
 
-    def capture(record, row, output, dpi):
+    def capture(record, row, output, dpi, **style):
         captured.append((record, row))
-        create(record, row, output, dpi)
+        create(record, row, output, dpi, **style)
 
     monkeypatch.setattr(plots, "create_fold_plot", capture)
     output = export_fold(config, SOURCE_ID, band, dpi=60)
@@ -67,3 +67,20 @@ def test_export_checks_missing_band_and_bad_period(tmp_path):
     frame.to_csv(catalogue, index=False)
     with pytest.raises(ValueError, match="positive and finite"):
         export_fold(config, SOURCE_ID)
+
+
+def test_export_accepts_display_only_marker_overrides(tmp_path, monkeypatch):
+    config, _, _, catalogue = saved_source(tmp_path)
+    before = catalogue.read_bytes()
+    styles = []
+    render = plots.create_fold_plot
+
+    def capture(*args, **kwargs):
+        styles.append((kwargs["point_size"], kwargs["point_alpha"]))
+        return render(*args, **kwargs)
+
+    monkeypatch.setattr(plots, "create_fold_plot", capture)
+    output = export_fold(config, SOURCE_ID, point_size=4.0, point_alpha=0.9)
+    assert output.is_file()
+    assert styles == [(4.0, 0.9)]
+    assert catalogue.read_bytes() == before

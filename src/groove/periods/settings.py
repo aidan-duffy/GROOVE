@@ -178,6 +178,8 @@ SKIP_ALREADY_PLOTTED = True
 PLOT_PERIOD_AXIS_LOG = True
 PLOT_CATALOGUE_PERIOD_IN_LEGEND = True
 PLOT_DPI = 250
+PLOT_MARKER_SIZE = 2.0  # Diameter in points; larger values help sparse displays.
+PLOT_MARKER_ALPHA = 0.55
 PLOT_SIGMA_LIMIT: float | None = 6.0
 PLOT_TWO_PHASE_CYCLES = True
 # Colour the phase-folded data by equal parts of the observed baseline.

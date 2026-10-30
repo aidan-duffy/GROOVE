@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Set standard photometry markers to 2 points; use larger, more opaque markers in demo configurations without changing synthetic observations.
+- Expose period/morphology marker size and opacity settings plus individual-export overrides; include morphology marker settings in plot receipts.
 - Use round photometry markers with light borders in individual, morphology, period and cleaning light-curve plots; distinguish mixed-band C points with open circles.
 - Use four chronological colours by default in period-search folds.
 - Add a standalone band-selected source-fold export using the saved morphology period, without altering analysis bands or saved products.

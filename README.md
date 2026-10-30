@@ -82,6 +82,7 @@ survey completeness measurement. To deliberately recalculate the fitted morpholo
 
 For a larger, 24-source example, use `groove demo groove_demo --extended`
 instead of the first command above (choose a new or empty destination).
+Demo configurations use larger, more opaque points to keep sparse curves readable.
 
 ## Download ATLAS photometry
 

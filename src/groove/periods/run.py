@@ -25,6 +25,10 @@ from . import validation as _validation
 # MAIN
 # =============================================================================
 def validate_configuration() -> None:
+    if not np.isfinite(S.PLOT_MARKER_SIZE) or S.PLOT_MARKER_SIZE <= 0:
+        raise ValueError("PLOT_MARKER_SIZE must be positive and finite")
+    if not np.isfinite(S.PLOT_MARKER_ALPHA) or not 0 < S.PLOT_MARKER_ALPHA <= 1:
+        raise ValueError("PLOT_MARKER_ALPHA must be greater than zero and at most one")
     if S.FORCED_FOLD_PERIOD_DAYS is not None:
         forced_period = float(S.FORCED_FOLD_PERIOD_DAYS)
         if not np.isfinite(forced_period) or forced_period <= 0:

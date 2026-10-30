@@ -194,10 +194,14 @@ periods:
   alias_learning_series: auto
   series_to_run: [o, c]             # add combined to compute combined photometry
   plot_series: [o, c]               # add combined to also save its plots
+  plot_marker_size: 2.0
+  plot_marker_alpha: 0.55
   min_period_days: 0.5
   max_period_days: 200.0
 morphology:                         # keys from src/groove/morphology/defaults.yaml
   maps_to_plot: [classification_evidence, combined, periodic]
   mode: fit                         # fit for the first run, transform to add targets to an existing map
+  review_plot_marker_size: 2.0
+  review_plot_marker_alpha: 0.55
   model_version: null               # e.g. reference_v1
 """

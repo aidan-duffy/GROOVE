@@ -1,14 +1,18 @@
 """Phase display changes retain every plotted sample and its band marker."""
 
+import logging
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
+import yaml
 
 from groove import config, pipeline
 from groove.core.plotstyle import phase_focus_mask
+from groove.demo import create
+from groove.morphology import features, persistence
 from groove.morphology import plots as morphology
 from groove.periods import plots as periods
 from groove.periods import settings
@@ -44,7 +48,7 @@ def test_morphology_fold_retains_points_markers_and_median_values():
         points = [line for line in ax.lines if " Q" in line.get_label()]
         assert points and {line.get_marker() for line in points} == {"o"}
         assert all(line.get_markersize() == pytest.approx(
-            2.0 if line.get_label().startswith("C") else 1.7) for line in points)
+            2.3 if line.get_label().startswith("C") else 2.0) for line in points)
         assert all(line.get_markerfacecolor() == "none" for line in points if line.get_label().startswith("C"))
         assert all(line.get_markeredgewidth() == 0 for line in points if line.get_label().startswith("O"))
         for line in ax.lines:
@@ -179,3 +183,45 @@ periods:
     assert adopted.harmonic_status == "2P_supported_by_odd_even_difference"
     assert abs(adopted.recommended_period_days / 14.2 - 1) < 0.01
     assert periods_received == [adopted.recommended_period_days]
+
+
+def test_demo_uses_visible_markers_without_changing_standard_defaults(tmp_path):
+    from groove.core.plotstyle import LIGHTCURVE_POINT_SIZE
+    assert LIGHTCURVE_POINT_SIZE == 2.0
+    cfg = yaml.safe_load(create(tmp_path / "extended", extended=True).read_text())
+    assert cfg["periods"]["plot_marker_size"] == 3.5
+    assert cfg["periods"]["plot_marker_alpha"] == 0.85
+    assert cfg["morphology"]["review_plot_marker_size"] == 3.0
+    assert cfg["morphology"]["review_plot_marker_alpha"] == 0.8
+
+
+def test_morphology_marker_choices_are_outside_scientific_fingerprints():
+    original = {"minimum_observations": 50, "review_plot_marker_size": 2.0,
+                "review_plot_marker_alpha": 0.55}
+    larger = {**original, "review_plot_marker_size": 3.0, "review_plot_marker_alpha": 0.8}
+    assert persistence.science_config_hash(original) == persistence.science_config_hash(larger)
+    assert features.feature_config_hash(original) == features.feature_config_hash(larger)
+
+
+def test_marker_setting_changes_refresh_phase_plot_receipts(tmp_path, monkeypatch):
+    time = np.arange(80, dtype=float) * 0.11
+    data = pd.DataFrame({"time": time, "mag": 14 + 0.2 * np.cos(time),
+                         "filter": "o", "err": 0.02})
+    sources = {"s": {"source_id": "s", "file_fingerprint": "unchanged", "data": data}}
+    table = pd.DataFrame({"source_key": ["s"], "source_id": ["s"],
+                          "recommended_period_days": [2.8], "final_primary_tag": ["wavelike"]})
+    calls = []
+    render = morphology.create_fold_plot
+
+    def capture(*args, **kwargs):
+        calls.append((kwargs["point_size"], kwargs["point_alpha"]))
+        return render(*args, **kwargs)
+
+    monkeypatch.setattr(morphology, "create_fold_plot", capture)
+    normal = {"n_jobs": 1, "review_plot_marker_size": 2.0, "review_plot_marker_alpha": 0.55}
+    logger = logging.getLogger(__name__)
+    for choices in [normal, normal, {**normal, "review_plot_marker_size": 3.0,
+                                   "review_plot_marker_alpha": 0.8}]:
+        _, missing = morphology.generate_phase_fold_products(sources, table, tmp_path, choices, logger)
+        assert missing.empty
+    assert calls == [(2.0, 0.55), (3.0, 0.8)]
