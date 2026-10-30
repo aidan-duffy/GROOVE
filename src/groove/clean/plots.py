@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from .. import execution as _execution
+from ..core.plotstyle import LIGHTCURVE_ALPHA, LIGHTCURVE_POINT_SIZE
 from . import cuts as _cuts
 from . import settings as S
 
@@ -212,8 +213,9 @@ def make_example_before_after_plot(
         axes[0].scatter(
             time[mask],
             values[mask],
-            s=8,
-            alpha=0.6,
+            s=LIGHTCURVE_POINT_SIZE ** 2,
+            marker="o", edgecolors="none", linewidths=0, rasterized=True,
+            alpha=LIGHTCURVE_ALPHA,
             label=f"{filter_name}-band",
         )
     axes[0].set_ylabel(y_label)
@@ -224,15 +226,17 @@ def make_example_before_after_plot(
     axes[1].scatter(
         time[keep],
         values[keep],
-        s=8,
-        alpha=0.65,
+        s=LIGHTCURVE_POINT_SIZE ** 2,
+        marker="o", edgecolors="none", linewidths=0, rasterized=True,
+        alpha=LIGHTCURVE_ALPHA,
         label="Retained",
     )
     axes[1].scatter(
         time[~keep],
         values[~keep],
-        s=14,
+        s=6,
         marker="x",
+        linewidths=0.6, rasterized=True,
         alpha=0.75,
         label="Rejected",
     )

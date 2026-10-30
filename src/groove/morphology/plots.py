@@ -17,7 +17,7 @@ from matplotlib.lines import Line2D
 
 from .. import execution as _execution
 from .. import resume as R
-from ..core.plotstyle import phase_focus_mask
+from ..core.plotstyle import LIGHTCURVE_ALPHA, lightcurve_marker_style, phase_focus_mask
 from . import classify as _classify
 from . import embedding as _embedding
 from . import features as _features
@@ -101,8 +101,8 @@ def _fold_scatter(ax, frame: pd.DataFrame, period: float, origin: float,
                  f'{band.upper()!s} Q{int(section + 1):d}'),
             ):
                 ax.plot(repeated_phase[visible], repeated_mags[visible],
-                        marker="o" if band == "c" else "s", markersize=2.0,
-                        linestyle="none", alpha=0.55, color=colour,
+                        **lightcurve_marker_style(band, multiple),
+                        linestyle="none", alpha=LIGHTCURVE_ALPHA, color=colour,
                         rasterized=True, label=label)
         n_bins = 80
         bins = np.minimum((phase * n_bins).astype(int), n_bins - 1)

@@ -20,6 +20,21 @@ BAD = "#CC79A7"
 
 DEFAULT_DPI = 150
 FIGURE_SIZES = {"single": (8, 5), "wide": (12, 5), "panel": (12, 8)}
+LIGHTCURVE_POINT_SIZE = 1.7  # Matplotlib diameter in points, independent of DPI.
+LIGHTCURVE_ALPHA = 0.55
+
+
+def lightcurve_marker_style(band: str = "o", multiple_bands: bool = False,
+                           marker: str = "o") -> dict[str, str | float]:
+    """Round photometry points; open C-band circles distinguish mixed bands."""
+    hollow = multiple_bands and band == "c"
+    return {
+        "marker": marker,
+        "markersize": LIGHTCURVE_POINT_SIZE + (0.3 if hollow else 0.0),
+        "markerfacecolor": "none" if hollow else "auto",
+        "markeredgecolor": "auto" if hollow else "none",
+        "markeredgewidth": 0.35 if hollow else 0.0,
+    }
 
 
 def phase_focus_mask(phase, two_cycles: bool = True) -> np.ndarray:

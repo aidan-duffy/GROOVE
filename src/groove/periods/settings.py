@@ -181,8 +181,8 @@ PLOT_DPI = 250
 PLOT_SIGMA_LIMIT: float | None = 6.0
 PLOT_TWO_PHASE_CYCLES = True
 # Colour the phase-folded data by equal parts of the observed baseline.
-# Band identity is still shown by the existing circle/square markers.
-PLOT_TIME_SEGMENTS = 6
+# Mixed-band plots distinguish open C-band from filled O-band circles.
+PLOT_TIME_SEGMENTS = 4
 # The first four retain the original four-segment colour scheme. Increasing the
 # segment count adds colours from the remainder of this stable palette.
 PLOT_TIME_COLOR_PALETTE = [
@@ -199,7 +199,7 @@ PLOT_TIME_COLOR_PALETTE = [
 ]
 PLOT_TIME_SEGMENT_COLORS = PLOT_TIME_COLOR_PALETTE[:PLOT_TIME_SEGMENTS]
 BEST_PER_STAR_DIRNAME = "best_per_star"
-BAND_MARKERS = {"c": "o", "o": "s", "single": "o"}
+BAND_MARKERS = {"c": "o", "o": "o", "single": "o"}
 
 # Optional expanded phase-fold diagnostics. These are visual review products
 # only: they do not change the alias correction, harmonic tests or recommended

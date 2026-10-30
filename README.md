@@ -27,6 +27,7 @@ All feedback, bug reports and suggestions are welcome. Contact
 - [Run individual stages](#run-individual-stages)
 - [Use existing photometry](#use-existing-photometry)
 - [Find your results](#results)
+- [Export a single-source phase plot](docs/map_controls.md#export-one-source-in-one-band)
 - [Restart or recalculate](#restart-or-recalculate)
 - [Add targets to an existing map](#add-targets-to-an-existing-map)
 - [Configure plots and analysis](#settings-and-scientific-interpretation)

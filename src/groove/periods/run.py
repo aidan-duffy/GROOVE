@@ -421,7 +421,8 @@ def main() -> None:
         row["source_confidence_class"] = str(source_info.get("confidence_class", ""))
         try:
             row["best_per_star_plot_path"] = _plots.plot_best_per_star(
-                metadata, prepared, payload["result"], row, catalogue_period, payload.get("bls"), source_label
+                metadata, prepared, payload["result"], row, catalogue_period, payload.get("bls"), source_label,
+                source_period_days=source_info.get("recommended_period_days")
             )
         except Exception as exc:
             _execution.report_exception(exc, __name__)

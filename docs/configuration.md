@@ -10,6 +10,26 @@ options. Their target/output paths differ because the bundled file lives in
 
 ## Common options
 
+Period folds use four equal intervals of the observed baseline by default
+(`periods.plot_time_segments: 4`). This colours time intervals, rather than
+equal numbers of observations. Morphology's Q1--Q4 colours divide the
+observations into chronological groups, which can differ for gappy sampling.
+
+The main period-review fold uses the source-level `recommended_period_days`,
+so an adopted 2P correction is shown consistently with morphology. Raw LS,
+per-series alias-aware periods and the 2P candidate remain marked separately.
+`periods.forced_fold_period_days` overrides only the main period-review fold
+and is labelled as forced; it does not change source recommendations,
+morphology periods or classifications. Use this override only for an explicitly
+chosen display period, not as evidence of automatic recovery.
+
+Light-curve figures use round points with light borders and thin error bars. In mixed-band
+phase folds, C uses open circles and O uses filled circles; single-band folds
+use filled circles. Chronological colours and the grey repeated-phase sections
+retain their meaning. Cleaning examples use small round measurements and
+small crosses for rejected points. Dataset shapes on UMAP maps remain
+controlled separately by `morphology.dataset_markers`.
+
 | Section/key | Default or purpose |
 |---|---|
 | name | Dataset name recorded in tables and map hover; use this name for shapes |

@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from .. import execution as _execution
-from ..core.plotstyle import phase_focus_mask
+from ..core.plotstyle import LIGHTCURVE_ALPHA, lightcurve_marker_style, phase_focus_mask
 from . import aliases as _aliases
 from . import classify as _classify
 from . import files as _files
@@ -72,6 +72,19 @@ def create_master_review_plot(recommendations: pd.DataFrame) -> str:
 # =============================================================================
 # PLOTTING
 # =============================================================================
+def main_fold_period(row: dict[str, Any], source_period_days: float | None = None) -> tuple[float, str]:
+    """Prefer the adopted source period for display; retain explicit overrides."""
+    if S.FORCED_FOLD_PERIOD_DAYS is not None:
+        return float(S.FORCED_FOLD_PERIOD_DAYS), "forced period"
+    source_period = _loading.safe_float(source_period_days, np.nan)
+    if np.isfinite(source_period) and source_period > 0:
+        return source_period, "source recommended period"
+    series_period = _loading.safe_float(row.get("recommended_series_period_days"), np.nan)
+    if np.isfinite(series_period) and series_period > 0:
+        return series_period, "series period"
+    return _loading.safe_float(row.get("raw_ls_best_period_days"), np.nan), "raw LS period"
+
+
 def plot_best_per_star(
     metadata: dict[str, Any],
     prepared: dict[str, Any],
@@ -80,6 +93,7 @@ def plot_best_per_star(
     catalogue_period: float,
     bls: dict[str, Any] | None = None,
     recommendation_label: str = "",
+    source_period_days: float | None = None,
 ) -> str:
     if S.PLOT_MODE.strip().lower() == "none" or prepared["series_name"] not in S.PLOT_SERIES:
         return ""
@@ -106,10 +120,12 @@ def plot_best_per_star(
     raw = _loading.safe_float(row.get("raw_ls_best_period_days"), np.nan)
     rec = _loading.safe_float(row.get("recommended_series_period_days"), np.nan)
     p2 = _loading.safe_float(row.get("tested_2p_days"), np.nan)
+    source_period = _loading.safe_float(source_period_days, np.nan)
     for label, period, style in [
         ("raw LS", raw, "--"),
         ("alias-aware series", rec, "-"),
         ("2P candidate", p2, ":"),
+        ("source recommended", source_period, "-."),
     ]:
         if np.isfinite(period) and period > 0:
             ax_ls.axvline(period, linestyle=style, linewidth=1.3, label=f"{label}={period:.6g} d")
@@ -138,16 +154,12 @@ def plot_best_per_star(
         ax_bls.grid(alpha=0.25, which="both")
         ax_bls.legend(fontsize=8, loc="best")
 
-    automatic_fold_period = rec if np.isfinite(rec) and rec > 0 else raw
-    fold_period = (
-        float(S.FORCED_FOLD_PERIOD_DAYS)
-        if S.FORCED_FOLD_PERIOD_DAYS is not None
-        else automatic_fold_period
-    )
+    fold_period, fold_period_label = main_fold_period(row, source_period_days)
     phase = _folding.fold_phase(prepared["time"], fold_period, S.PLOT_TWO_PHASE_CYCLES)
     plot_signal = _folding.repeated(prepared["plot_signal"])
     plot_error = _folding.repeated(prepared["plot_error"])
     bands = _folding.repeated(prepared["band"])
+    multiple_bands = len(set(bands.astype(str))) > 1
     original_time = np.asarray(prepared["time"], dtype=float)
     time_min = float(np.nanmin(original_time))
     time_max = float(np.nanmax(original_time))
@@ -175,8 +187,9 @@ def plot_best_per_star(
                 if np.any(visible):
                     ax_fold.errorbar(
                         phase[visible], plot_signal[visible], yerr=plot_error[visible],
-                        ms=2.5, alpha=0.55, elinewidth=0.5, capsize=0,
-                        marker=S.BAND_MARKERS.get(band, "."), linestyle="none",
+                        alpha=LIGHTCURVE_ALPHA, elinewidth=0.35, capsize=0,
+                        **lightcurve_marker_style(band, multiple_bands, S.BAND_MARKERS.get(band, "o")),
+                        linestyle="none",
                         color=colour,
                     )
 
@@ -200,10 +213,12 @@ def plot_best_per_star(
     band_handles = []
     for band in sorted(set(bands.astype(str))):
         handle = ax_fold.plot(
-            [], [], color="0.35", alpha=0.55,
-            marker=S.BAND_MARKERS.get(band, "."), linestyle="none",
+            [], [], color="0.35", alpha=LIGHTCURVE_ALPHA,
+            **lightcurve_marker_style(band, multiple_bands, S.BAND_MARKERS.get(band, "o")),
+            linestyle="none",
             label=f"{band}-band marker" if band != "single" else "data marker",
         )[0]
+        handle.set_markersize(4)
         band_handles.append(handle)
     if prepared["invert_y"]:
         ax_fold.invert_yaxis()
@@ -218,9 +233,6 @@ def plot_best_per_star(
     ax_fold.legend(
         handles=band_handles, title="Band marker",
         fontsize=8, title_fontsize=8, loc="upper left",
-    )
-    fold_period_label = (
-        "forced period" if S.FORCED_FOLD_PERIOD_DAYS is not None else "series period"
     )
     ax_fold.set_title(
         f"Folded at {fold_period_label} P={fold_period:.4f} d | "
@@ -276,6 +288,7 @@ def plot_diagnostic_fold_axis(ax: Any, prepared: dict[str, Any], period: float) 
     plot_signal = _folding.repeated(prepared["plot_signal"])
     plot_error = _folding.repeated(prepared["plot_error"])
     bands = _folding.repeated(prepared["band"]).astype(str)
+    multiple_bands = len(set(bands)) > 1
 
     original_time = np.asarray(prepared["time"], dtype=float)
     time_min = float(np.nanmin(original_time))
@@ -304,8 +317,9 @@ def plot_diagnostic_fold_axis(ax: Any, prepared: dict[str, Any], period: float) 
                 if np.any(visible):
                     ax.errorbar(
                         phase[visible], plot_signal[visible], yerr=plot_error[visible],
-                        ms=2.3, alpha=0.55, elinewidth=0.45, capsize=0,
-                        marker=S.BAND_MARKERS.get(band, "."), linestyle="none",
+                        alpha=LIGHTCURVE_ALPHA, elinewidth=0.35, capsize=0,
+                        **lightcurve_marker_style(band, multiple_bands, S.BAND_MARKERS.get(band, "o")),
+                        linestyle="none",
                         color=colour,
                     )
 
@@ -317,6 +331,7 @@ def plot_diagnostic_fold_axis(ax: Any, prepared: dict[str, Any], period: float) 
 
 def diagnostic_legend_handles(ax: Any, prepared: dict[str, Any]) -> tuple[list[Any], list[Any]]:
     """Create separate timeline-colour and band-marker legend handles."""
+    multiple_bands = len(set(np.asarray(prepared["band"]).astype(str))) > 1
     time_span_years = _loading.safe_float(prepared.get("baseline_days"), 0.0) / 365.25
     segment_edges_years = np.linspace(0.0, time_span_years, S.PLOT_TIME_SEGMENTS + 1)
     timeline_handles: list[Any] = []
@@ -340,7 +355,8 @@ def diagnostic_legend_handles(ax: Any, prepared: dict[str, Any]) -> tuple[list[A
         band_handles.append(
             ax.plot(
                 [], [], color="0.35", alpha=0.55,
-                marker=S.BAND_MARKERS.get(band, "."), linestyle="none",
+                **lightcurve_marker_style(band, multiple_bands, S.BAND_MARKERS.get(band, "o")),
+                linestyle="none",
                 label=f"{band}-band" if band != "single" else "data",
             )[0]
         )
@@ -721,7 +737,9 @@ def plot_from_saved_results(
                 row["source_detection_label"] = str(source_info.get("detection_label", row.get("source_detection_label", "")))
                 row["source_confidence_class"] = str(source_info.get("confidence_class", row.get("source_confidence_class", "")))
                 try:
-                    row["best_per_star_plot_path"] = plot_best_per_star(metadata, prepared, result, row, catalogue_period, bls, source_label)
+                    row["best_per_star_plot_path"] = plot_best_per_star(
+                        metadata, prepared, result, row, catalogue_period, bls, source_label,
+                        source_period_days=source_info.get("recommended_period_days"))
                     made += 1
                 except Exception as exc:
                     _execution.report_exception(exc, __name__)

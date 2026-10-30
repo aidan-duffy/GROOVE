@@ -158,6 +158,26 @@ for your own data. Inspect options with:
 groove morphology -c "$map_root/batch/run.yaml" -- --help
 ```
 
+## Export one source in one band
+
+To export one source in the morphology style with only O-band observations,
+run this from the repository root after its morphology stage has completed:
+
+```bash
+python tools/plot_source_fold.py -c run.yaml --source-id YOUR_GAIA_DR3_ID --band o
+```
+
+The separate PNG is written to `<output_folder>/plots/individual/`. It retains
+the saved morphology period and the phase origin of the complete accepted
+source. Only the displayed bands change; ML features, labels, saved maps and
+the usual two-band phase images are untouched. One band is shown in its
+original magnitude scale, rather than relative to a band median. Use `--band c`
+or `--band both` for other displays, or `--output path/to/fold.pdf` for PDF.
+Chronological Q1--Q4 groups are calculated from the displayed observations.
+The YAML is the original pipeline config, not the resolved morphology-only
+configuration. Use `--catalogue path/to/all_sources.csv` to select a saved
+morphology catalogue explicitly if necessary.
+
 ## Redraw phase folds without a periodogram
 
 Morphology writes standalone phase folds to
