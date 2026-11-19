@@ -160,6 +160,9 @@ ODD_EVEN_MIN_SIGNIFICANT_BIN_FRACTION = 0.20
 # 6. PLOTTING
 # =============================================================================
 PLOT_MODE = "all"  # all | none
+PLOT_BLS = True  # Display only; RUN_BLS controls calculation.
+PLOT_FAP = True  # Analytical LS thresholds; no BLS false-alarm calibration.
+PLOT_FAP_LEVELS = [0.01]
 
 # Force the main phase-fold panels to use this period in days. This changes
 # only the visual fold: LS/BLS searches, alias handling and recommended periods

@@ -97,6 +97,7 @@ def plot_best_per_star(
 ) -> str:
     if S.PLOT_MODE.strip().lower() == "none" or prepared["series_name"] not in S.PLOT_SERIES:
         return ""
+    bls = bls if S.PLOT_BLS else None
     nrows = 3 if bls is not None else 2
     fig, axes = plt.subplots(
         nrows, 1,
@@ -141,6 +142,8 @@ def plot_best_per_star(
 
     if np.isfinite(catalogue_period) and catalogue_period > 0 and S.PLOT_CATALOGUE_PERIOD_IN_LEGEND:
         ax_ls.axvline(catalogue_period, linestyle=":", linewidth=1.5, label=f"catalogue={catalogue_period:.6g} d")
+    from .significance_plot import draw_fap
+    draw_fap(ax_ls, result, row)
     ax_ls.legend(fontsize=8, loc="best")
     ax_ls.set_title(f"LS periodogram — {metadata['object_name']} / {prepared['series_name']}")
 

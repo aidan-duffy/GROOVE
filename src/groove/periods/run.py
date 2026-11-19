@@ -25,6 +25,8 @@ from . import validation as _validation
 # MAIN
 # =============================================================================
 def validate_configuration() -> None:
+    from .significance_plot import validate_levels
+    validate_levels(S.PLOT_FAP_LEVELS)
     if not np.isfinite(S.PLOT_MARKER_SIZE) or S.PLOT_MARKER_SIZE <= 0:
         raise ValueError("PLOT_MARKER_SIZE must be positive and finite")
     if not np.isfinite(S.PLOT_MARKER_ALPHA) or not 0 < S.PLOT_MARKER_ALPHA <= 1:

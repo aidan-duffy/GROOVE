@@ -225,3 +225,25 @@ The outer `--n-jobs` controls period workers. Morphology's separate
 morphology datasets and period-table paths from the top-level sample; advanced
 multi-dataset input is a separate morphology interface, not a replacement for
 the top-level pipeline schema.
+
+
+## Periodogram display
+
+```yaml
+periods:
+  run_bls: true
+  plot_bls: true
+  plot_fap: true
+  plot_fap_levels: [0.01]
+```
+
+`run_bls` controls calculation; `plot_bls` only hides/shows a valid BLS panel.
+`plot_fap` displays source/series-specific analytical LS power thresholds and
+the raw-peak FAP. It does not change tag rules or period recommendations.
+Levels must lie strictly between zero and one. FAP uses the existing Baluev
+convention and is not a probability that the adopted period is incorrect.
+No LS FAP threshold is applied to the BLS SNR axis. Unsupported analytical
+levels are reported as unavailable. Regenerate figures to update old PNGs.
+
+When interpreting individual targets, users should check nearby sources and
+images for blending; forced photometry alone does not identify which star varies.
